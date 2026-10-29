@@ -1,0 +1,22 @@
+{
+    "schemes": [
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "This is a document for API use in [Backend API Deka-waf]",
+        "title": "Swagger for [Backend API Deka-waf]",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "ai.cloudeka.id",
+    "basePath": "/core/dekawaf",
+    "paths": {},
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

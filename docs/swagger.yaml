@@ -1,0 +1,16 @@
+basePath: /core/dekawaf
+host: ai.cloudeka.id
+info:
+  contact: {}
+  description: This is a document for API use in [Backend API Deka-waf]
+  title: Swagger for [Backend API Deka-waf]
+  version: "1.0"
+paths: {}
+schemes:
+- https
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
