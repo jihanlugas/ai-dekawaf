@@ -30,6 +30,10 @@ func SetupRouter() *gin.Engine {
 		ctx.String(http.StatusOK, "Oke")
 	})
 
+	r.GET("/health-check", middleware.AuthorizeJWT(), func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "Ok")
+	})
+
 	return r
 }
 

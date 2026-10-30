@@ -38,7 +38,7 @@ func Error(c *gin.Context, code int, msg string, err error, payload interface{})
 	c.JSON(code, response)
 }
 
-func ErrorMiddleware(c *gin.Context, code int, msg string, err error, payload interface{}) {
+func ErrorAbort(c *gin.Context, code int, msg string, err error, payload interface{}) {
 	errorMessage := ""
 
 	if err != nil {

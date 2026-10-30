@@ -33,7 +33,7 @@ func AuthorizeJWT() gin.HandlerFunc {
 		if authHeader == "" {
 			err := errors.New("Token not found.")
 			logger.Error(noAuthorizationHeaderFound, err)
-			response.Error(c, http.StatusUnauthorized, noAuthorizationHeaderFound, err, nil)
+			response.ErrorAbort(c, http.StatusUnauthorized, noAuthorizationHeaderFound, err, nil)
 
 			return
 		}
@@ -41,7 +41,7 @@ func AuthorizeJWT() gin.HandlerFunc {
 		typeToken := strings.Split(authHeader, " ")
 		if len(typeToken) != 2 || typeToken[0] != "Bearer" {
 			logger.Error(tokenAuthorizationNotValid, nil)
-			response.Error(c, http.StatusUnauthorized, tokenAuthorizationNotValid, nil, nil)
+			response.ErrorAbort(c, http.StatusUnauthorized, tokenAuthorizationNotValid, nil, nil)
 
 			return
 		}
@@ -51,6 +51,13 @@ func AuthorizeJWT() gin.HandlerFunc {
 		// logger.Info("Authorization Token", logrus.Fields{"token": authHeader})
 
 		token, err := validateToken(authHeader)
+		if err != nil {
+			logger.Error(tokenAuthorizationNotValid, nil)
+			response.ErrorAbort(c, http.StatusUnauthorized, tokenAuthorizationNotValid, err, nil)
+
+			return
+		}
+
 		if token.Valid {
 			claims := token.Claims.(jwt.MapClaims)
 			// logger.Info("Token is Valid", logrus.Fields{"claims": claims})
@@ -73,7 +80,7 @@ func AuthorizeJWT() gin.HandlerFunc {
 			c.Next()
 		} else {
 			logger.Error(noAuthorizationHeaderFound, err)
-			response.Error(c, http.StatusUnauthorized, "Not Valid Token or Token Expired", err, nil)
+			response.ErrorAbort(c, http.StatusUnauthorized, "Not Valid Token or Token Expired", err, nil)
 			return
 		}
 	}

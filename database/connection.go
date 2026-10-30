@@ -1,52 +1,64 @@
 package database
 
 import (
-	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
-	"go.elastic.co/apm/module/apmgorm/v2"
-	_ "go.elastic.co/apm/module/apmgorm/v2/dialects/postgres"
+	"go.elastic.co/apm/module/apmsql/v2/pgxv5"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-var (
-	psqlConn *gorm.DB
-	err      error
-)
+var psqlConn *gorm.DB
 
 // initialize database
 func init() {
-	// // Environment variables are loaded from Kubernetes config
-	// err := godotenv.Load()
-	// if err != nil {
-	// 	log.Fatal("Error loading .env file")
-	// }
+	// Environment variables are loaded from Kubernetes config
 	// setupPostsqlConn()
 }
 
 func setupPostsqlConn() {
+	dsnURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(os.Getenv("POSTGRE_USER"), os.Getenv("POSTGRE_PASS")),
+		Host:   net.JoinHostPort(os.Getenv("POSTGRE_HOST"), os.Getenv("POSTGRE_PORT")),
+		Path:   "/" + os.Getenv("POSTGRE_DBNAME"),
+	}
+	query := dsnURL.Query()
+	query.Set("sslmode", os.Getenv("POSTGRE_SSLMODE"))
+	dsnURL.RawQuery = query.Encode()
+	dsn := dsnURL.String()
 
-	dns := fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=%s password=%s",
-		os.Getenv("POSTGRE_HOST"), os.Getenv("POSTGRE_PORT"), os.Getenv("POSTGRE_USER"), os.Getenv("POSTGRE_DBNAME"), os.Getenv("POSTGRE_SSLMODE"), os.Getenv("POSTGRE_PASS"))
-	psqlConn, err = apmgorm.Open("postgres", dns)
+	var err error
+
+	psqlConn, err = gorm.Open(
+		postgres.New(postgres.Config{
+			DSN:        dsn,
+			DriverName: apmpgxv5.DriverName,
+		}),
+		&gorm.Config{
+			Logger: logger.Default.LogMode(logger.Info),
+		},
+	)
 
 	if err != nil {
-		log.Fatalf("Failed to create a connection to database error:%s", err)
+		log.Fatalf("Failed to create a connection to database: %v", err)
 	}
 
-	err = psqlConn.DB().Ping()
+	db, err := psqlConn.DB()
 	if err != nil {
-		log.Fatalf("Failed to ping database: %s", err)
+		log.Fatalf("Failed to get database instance: %v", err)
 	}
 
-	psqlConn.LogMode(true)
-
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
 }
 
-// PostsqlConn return mysql connection from gorm ORM
+// PostsqlConn returns PostgreSQL connection from GORM ORM.
 func PostsqlConn() *gorm.DB {
 	return psqlConn
 }
