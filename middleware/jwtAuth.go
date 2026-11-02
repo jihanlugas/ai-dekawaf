@@ -94,3 +94,37 @@ func validateToken(token string) (*jwt.Token, error) {
 		return []byte(os.Getenv("API_SECRET")), nil
 	})
 }
+
+// GetOrganizationID returns the organization ID from the gin context.
+func GetOrganizationID(c *gin.Context) string {
+	return c.GetString(constant.ContextOrganizationID)
+}
+
+// GetUser returns the user information from the gin context.
+func GetUserID(c *gin.Context) string {
+	return c.GetString(constant.ContextUserID)
+}
+
+// GetUserRole returns the user role from the gin context.
+func GetUserRole(c *gin.Context) string {
+	return c.GetString(constant.ContextUserRole)
+}
+
+// GetRoleName returns the role name from the role ID.
+func GetRoleName(id int64) string {
+	var roleName string
+	switch id {
+	case 1:
+		roleName = "Owner"
+	case 2:
+		roleName = "Member"
+	case 3:
+		roleName = "Customer-Care"
+	case 99:
+		roleName = "Superadmin"
+	case 100:
+		roleName = "GodMode"
+	}
+
+	return roleName
+}
