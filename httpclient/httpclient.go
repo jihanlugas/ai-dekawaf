@@ -17,6 +17,8 @@ type Request struct {
 	URL     string
 	Headers map[string]string
 	Body    interface{}
+	Reader  io.Reader
+	Length  int64
 }
 
 type Response struct {
@@ -34,7 +36,10 @@ func init() {
 func do(ctx context.Context, req Request) (*Response, error) {
 	var body io.Reader
 
-	if req.Body != nil {
+	if req.Reader != nil {
+		body = req.Reader
+		fmt.Printf("\n--- HTTP Request ---\n%s %s\nBody: (stream)\n", req.Method, req.URL)
+	} else if req.Body != nil {
 		payload, err := json.Marshal(req.Body)
 		if err != nil {
 			return nil, fmt.Errorf("marshal request body: %w", err)
@@ -54,6 +59,9 @@ func do(ctx context.Context, req Request) (*Response, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
+	}
+	if req.Reader != nil && req.Length > 0 {
+		httpReq.ContentLength = req.Length
 	}
 
 	for key, value := range req.Headers {
@@ -110,6 +118,16 @@ func Post(ctx context.Context, url string, headers map[string]string, payload in
 		URL:     url,
 		Headers: headers,
 		Body:    payload,
+	})
+}
+
+func PostReader(ctx context.Context, url string, headers map[string]string, body io.Reader, contentLength int64) (*Response, error) {
+	return do(ctx, Request{
+		Method:  http.MethodPost,
+		URL:     url,
+		Headers: headers,
+		Reader:  body,
+		Length:  contentLength,
 	})
 }
 

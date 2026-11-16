@@ -93,3 +93,15 @@ type F5CreatePool struct {
 		IsSubcollection bool   `json:"isSubcollection"`
 	} `json:"membersReference"`
 }
+
+type F5Upload struct {
+	RemainingByteCount int `json:"remainingByteCount"`
+	UsedChunks         struct {
+		Num0 int `json:"0"`
+	} `json:"usedChunks"`
+	TotalByteCount    int    `json:"totalByteCount"`
+	LocalFilePath     string `json:"localFilePath"`
+	TemporaryFilePath string `json:"temporaryFilePath"`
+	Generation        int    `json:"generation"`
+	LastUpdateMicros  int64  `json:"lastUpdateMicros"`
+}
