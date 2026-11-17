@@ -17,3 +17,25 @@ type F5CreatePool struct {
 		Name string `json:"name"`
 	} `json:"members"`
 }
+
+type F5Install struct {
+	Command       string `json:"command"`
+	Name          string `json:"name"`
+	FromLocalFile string `json:"from-local-file"`
+}
+
+type F5CreateSslSecurityProfile struct {
+	Name         string `json:"name"`
+	DefaultsFrom string `json:"defaultsFrom"`
+	CertKeyChain []struct {
+		Name  string `json:"name"`
+		Cert  string `json:"cert"`
+		Key   string `json:"key"`
+		Chain string `json:"chain"`
+	} `json:"certKeyChain"`
+}
+
+type F5ActiveSNI struct {
+	ServerName string `json:"serverName"`
+	SniDefault string `json:"sniDefault"`
+}
