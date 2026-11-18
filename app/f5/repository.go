@@ -2,9 +2,9 @@ package f5
 
 import (
 	"context"
-	"dekawaf/httpclient"
-	"dekawaf/request"
-	"dekawaf/response"
+	"ai-dekawaf/httpclient"
+	"ai-dekawaf/request"
+	"ai-dekawaf/response"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"

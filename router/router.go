@@ -1,19 +1,22 @@
 package router
 
 import (
-	"dekawaf/middleware"
+	"ai-dekawaf/app/websocket"
+	"ai-dekawaf/middleware"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 
-	_ "dekawaf/docs"
+	_ "ai-dekawaf/docs"
 
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
 )
 
 func SetupRouter() *gin.Engine {
+	websocket.InitHandler()
+
 	r := gin.Default()
 	if os.Getenv("ENV") != "local" {
 		gin.SetMode(gin.ReleaseMode)
@@ -25,10 +28,6 @@ func SetupRouter() *gin.Engine {
 	r.GET("/metrics", middleware.PrometheusMetricsHandler())
 
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
-
-	r.GET("/", func(ctx *gin.Context) {
-		ctx.String(http.StatusOK, "Oke")
-	})
 
 	r.GET("/health-check", middleware.AuthorizeJWT(), func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "Ok")

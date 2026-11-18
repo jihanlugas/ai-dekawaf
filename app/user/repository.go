@@ -1,8 +1,8 @@
 package user
 
 import (
-	"dekawaf/logger"
-	"dekawaf/model"
+	"ai-dekawaf/logger"
+	"ai-dekawaf/model"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"

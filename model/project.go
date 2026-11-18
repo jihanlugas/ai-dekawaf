@@ -1,7 +1,7 @@
 package model
 
 import (
-	"dekawaf/constant"
+	"ai-dekawaf/constant"
 	"errors"
 	"time"
 

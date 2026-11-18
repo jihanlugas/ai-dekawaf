@@ -3,7 +3,7 @@ package f5
 import (
 	"bytes"
 	"context"
-	"dekawaf/request"
+	"ai-dekawaf/request"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -428,9 +428,9 @@ func TestPolicyAndDefenseOperations(t *testing.T) {
 			func() error { _, err := repo.GetSecurityPolicy(ctx, "policy/id"); return err }},
 		{"list bot defense", http.MethodGet, "/mgmt/tm/security/bot-defense/profile", "", "get bot defense",
 			func() error { _, err := repo.ListBotDefense(ctx); return err }},
-		{"get bot defense", http.MethodGet, "/mgmt/tm/security/bot-defense/profile/~Common~bot%2Fname", "", "list bot defense",
+		{"get bot defense", http.MethodGet, "/mgmt/tm/security/bot-defense/profile/~Common~bot%2Fname", "", "get bot defense",
 			func() error { _, err := repo.GetBotDefense(ctx, "~Common~bot/name"); return err }},
-		{"list log profile", http.MethodGet, "/mgmt/tm/security/log/profile", "", "get log profile",
+		{"list log profile", http.MethodGet, "/mgmt/tm/security/log/profile", "", "list log profile",
 			func() error { _, err := repo.ListLogProfile(ctx); return err }},
 		{"get log profile", http.MethodGet, "/mgmt/tm/security/log/profile/~Common~log%2Fname", "", "get log profile",
 			func() error { _, err := repo.GetLogProfile(ctx, "~Common~log/name"); return err }},

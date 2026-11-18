@@ -1,8 +1,8 @@
 package main
 
 import (
-	"dekawaf/database"
-	"dekawaf/router"
+	"ai-dekawaf/database"
+	"ai-dekawaf/router"
 	"fmt"
 	"log"
 	"os"

@@ -1,9 +1,9 @@
 package auditlog
 
 import (
-	"dekawaf/constant"
-	"dekawaf/model"
-	"dekawaf/request"
+	"ai-dekawaf/constant"
+	"ai-dekawaf/model"
+	"ai-dekawaf/request"
 	"fmt"
 	"log"
 	"time"

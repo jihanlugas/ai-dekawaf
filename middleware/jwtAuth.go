@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"dekawaf/constant"
-	"dekawaf/logger"
-	"dekawaf/response"
+	"ai-dekawaf/constant"
+	"ai-dekawaf/logger"
+	"ai-dekawaf/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"

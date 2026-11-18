@@ -1,11 +1,11 @@
 package permission
 
 import (
-	"dekawaf/app/project"
-	"dekawaf/app/user"
-	"dekawaf/constant"
-	"dekawaf/middleware"
-	"dekawaf/model"
+	"ai-dekawaf/app/project"
+	"ai-dekawaf/app/user"
+	"ai-dekawaf/constant"
+	"ai-dekawaf/middleware"
+	"ai-dekawaf/model"
 
 	"github.com/gin-gonic/gin"
 )
