@@ -12,15 +12,15 @@ type Repository interface {
 	GetProjectByUserIdAndProjectId(projectId, userId string) (userProject model.Userproject, err error)
 }
 
-type projectRepository struct {
+type repository struct {
 	connection *gorm.DB
 }
 
-func NewProjectRepository(connection *gorm.DB) Repository {
-	return &projectRepository{connection}
+func NewRepository(connection *gorm.DB) Repository {
+	return &repository{connection}
 }
 
-func (db *projectRepository) GetProjectByUserIdAndProjectId(projectId, userId string) (model.Userproject, error) {
+func (db *repository) GetProjectByUserIdAndProjectId(projectId, userId string) (model.Userproject, error) {
 	var userProject model.Userproject
 	err := db.connection.
 		Where(" project_id = ? and user_id = ? ", projectId, userId).

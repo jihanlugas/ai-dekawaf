@@ -1,11 +1,119 @@
 basePath: /core/dekawaf
+definitions:
+  response.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      status:
+        type: boolean
+    type: object
 host: ai.cloudeka.id
 info:
   contact: {}
   description: This is a document for API use in [Backend API Deka-waf]
   title: Swagger for [Backend API Deka-waf]
   version: "1.0"
-paths: {}
+paths:
+  /security-profile:
+    get:
+      consumes:
+      - application/json
+      description: Get security profiles
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Get security profiles
+      tags:
+      - Security Profile
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create security profile
+      parameters:
+      - description: Name
+        in: formData
+        name: name
+        type: string
+      - description: Description
+        in: formData
+        name: description
+        type: string
+      - description: Domain
+        in: formData
+        name: domain
+        type: string
+      - description: Node
+        in: formData
+        name: node
+        type: string
+      - description: Pool
+        in: formData
+        name: pool
+        type: string
+      - description: Port
+        in: formData
+        name: port
+        type: string
+      - collectionFormat: multi
+        description: Server technologies
+        in: formData
+        items:
+          type: string
+        name: serverTechnologies
+        type: array
+      - description: Enforcement mode
+        in: formData
+        name: enforcementMode
+        type: string
+      - description: Bot protection
+        in: formData
+        name: botProtection
+        type: boolean
+      - description: Certificate file
+        in: formData
+        name: certificateFile
+        type: file
+      - description: Key file
+        in: formData
+        name: keyFile
+        type: file
+      - description: Certificate chain file
+        in: formData
+        name: chainFile
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: Create security profile
+      tags:
+      - Security Profile
 schemes:
 - https
 securityDefinitions:

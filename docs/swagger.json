@@ -11,7 +11,171 @@
     },
     "host": "ai.cloudeka.id",
     "basePath": "/core/dekawaf",
-    "paths": {},
+    "paths": {
+        "/security-profile": {
+            "get": {
+                "description": "Get security profiles",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security Profile"
+                ],
+                "summary": "Get security profiles",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create security profile",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Security Profile"
+                ],
+                "summary": "Create security profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Name",
+                        "name": "name",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Description",
+                        "name": "description",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Domain",
+                        "name": "domain",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Node",
+                        "name": "node",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pool",
+                        "name": "pool",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Port",
+                        "name": "port",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Server technologies",
+                        "name": "serverTechnologies",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Enforcement mode",
+                        "name": "enforcementMode",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Bot protection",
+                        "name": "botProtection",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Certificate file",
+                        "name": "certificateFile",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Key file",
+                        "name": "keyFile",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Certificate chain file",
+                        "name": "chainFile",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "response.Response": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "error": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "boolean"
+                }
+            }
+        }
+    },
     "securityDefinitions": {
         "BearerAuth": {
             "type": "apiKey",

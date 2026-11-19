@@ -1,21 +1,45 @@
 package router
 
 import (
-	"ai-dekawaf/app/websocket"
+	"ai-dekawaf/app/auditlog"
+	"ai-dekawaf/app/f5"
+	"ai-dekawaf/app/permission"
+	"ai-dekawaf/app/project"
+	"ai-dekawaf/app/securityprofile"
+	"ai-dekawaf/app/user"
+	"ai-dekawaf/database"
 	"ai-dekawaf/middleware"
 	"net/http"
 	"os"
 
-	"github.com/gin-gonic/gin"
-
 	_ "ai-dekawaf/docs"
+
+	"github.com/gin-gonic/gin"
 
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
 )
 
+var (
+	db = database.PostsqlConn()
+
+	// repositories
+	securityprofileRepo securityprofile.Repository = securityprofile.NewRepository(db)
+	auditlogRepo        auditlog.Repository        = auditlog.NewRepository(db)
+	f5Repo              f5.Repository              = f5.NewRepository()
+	projectRepo         project.Repository         = project.NewRepository(db)
+	userRepo            user.Repository            = user.NewRepository(db)
+
+	// usecases
+	securityprofileUsecase securityprofile.Usecase = securityprofile.NewUsecase(securityprofileRepo, auditlogRepo, f5Repo)
+	permissionUsecase      permission.Usecase      = permission.NewUsecase(projectRepo, userRepo)
+
+	// handler
+	securityprofileHandler securityprofile.Handler = securityprofile.NewHandler(securityprofileUsecase, permissionUsecase, projectRepo)
+)
+
 func SetupRouter() *gin.Engine {
-	websocket.InitHandler()
+	// websocket.InitHandler()
 
 	r := gin.Default()
 	if os.Getenv("ENV") != "local" {
@@ -32,6 +56,10 @@ func SetupRouter() *gin.Engine {
 	r.GET("/health-check", middleware.AuthorizeJWT(), func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "Ok")
 	})
+
+	rSecurityProfile := r.Group("/security-profile")
+	rSecurityProfile.GET("", securityprofileHandler.Page)
+	rSecurityProfile.POST("", securityprofileHandler.Create)
 
 	return r
 }

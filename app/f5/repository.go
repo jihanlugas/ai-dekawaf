@@ -1,10 +1,10 @@
 package f5
 
 import (
-	"context"
 	"ai-dekawaf/httpclient"
 	"ai-dekawaf/request"
 	"ai-dekawaf/response"
+	"context"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
@@ -32,7 +32,7 @@ type Repository interface {
 	GetLogProfile(ctx context.Context, fullpath string) (data response.F5LogProfile, err error)
 	ListLogProfile(ctx context.Context) (data response.F5ListLogProfile, err error)
 	AttachBotDefenseandLogProfileToVS(ctx context.Context, fullpath string, req request.F5AttachBotDefenseandLogProfileToVS) (data response.F5AttachBotDefenseandLogProfileToVS, err error)
-	Upload(ctx context.Context, fileReq *multipart.FileHeader) (data response.F5Upload, err error)
+	Upload(ctx context.Context, name string, fileReq *multipart.FileHeader) (data response.F5Upload, err error)
 	InstallCertOrChain(ctx context.Context, req request.F5Install) (data response.F5Install, err error)
 	InstallKey(ctx context.Context, req request.F5Install) (data response.F5Install, err error)
 	ListCertAndChain(ctx context.Context) (data response.F5ListCertAndChain, err error)
@@ -49,16 +49,16 @@ type Repository interface {
 	VerifySSLInVS(ctx context.Context, fullpath string) (data response.F5VerifySSLInVS, err error)
 }
 
-type f5Repository struct {
+type repository struct {
 }
 
-func NewF5Repository() Repository {
-	return &f5Repository{}
+func NewRepository() Repository {
+	return &repository{}
 }
 
 var Token string
 
-func (f *f5Repository) Login(ctx context.Context) (err error) {
+func (f *repository) Login(ctx context.Context) (err error) {
 	var data response.F5Login
 	loginRequest := request.F5Login{
 		Username:          os.Getenv("F5_USERNAME"),
@@ -82,7 +82,7 @@ func (f *f5Repository) Login(ctx context.Context) (err error) {
 	return nil
 }
 
-func (f *f5Repository) CreateNode(ctx context.Context, req request.F5CreateNode) (data response.F5CreateNode, err error) {
+func (f *repository) CreateNode(ctx context.Context, req request.F5CreateNode) (data response.F5CreateNode, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/node", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -98,7 +98,7 @@ func (f *f5Repository) CreateNode(ctx context.Context, req request.F5CreateNode)
 	return data, nil
 }
 
-func (f *f5Repository) CreatePool(ctx context.Context, req request.F5CreatePool) (data response.F5CreatePool, err error) {
+func (f *repository) CreatePool(ctx context.Context, req request.F5CreatePool) (data response.F5CreatePool, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/pool", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -114,7 +114,7 @@ func (f *f5Repository) CreatePool(ctx context.Context, req request.F5CreatePool)
 	return data, nil
 }
 
-func (f *f5Repository) GetMemberPool(ctx context.Context, poolFullPath, memberFullPath string) (data response.F5MemberPool, err error) {
+func (f *repository) GetMemberPool(ctx context.Context, poolFullPath, memberFullPath string) (data response.F5MemberPool, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/pool/%s/members/%s", os.Getenv("F5_URL"), url.PathEscape(poolFullPath), url.PathEscape(memberFullPath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -128,7 +128,7 @@ func (f *f5Repository) GetMemberPool(ctx context.Context, poolFullPath, memberFu
 	return data, nil
 }
 
-func (f *f5Repository) ListMemberPool(ctx context.Context, poolFullPath string) (data response.F5ListMemberPool, err error) {
+func (f *repository) ListMemberPool(ctx context.Context, poolFullPath string) (data response.F5ListMemberPool, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/pool/%s/members", os.Getenv("F5_URL"), url.PathEscape(poolFullPath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -142,7 +142,7 @@ func (f *f5Repository) ListMemberPool(ctx context.Context, poolFullPath string) 
 	return data, nil
 }
 
-func (f *f5Repository) CreateSecurityPolicy(ctx context.Context, req request.F5CreateSecurityPolicy) (data response.F5CreateSecurityPolicy, err error) {
+func (f *repository) CreateSecurityPolicy(ctx context.Context, req request.F5CreateSecurityPolicy) (data response.F5CreateSecurityPolicy, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -156,7 +156,7 @@ func (f *f5Repository) CreateSecurityPolicy(ctx context.Context, req request.F5C
 	return data, nil
 }
 
-func (f *f5Repository) ListSecurityPolicy(ctx context.Context) (data response.F5ListSecurityPolicy, err error) {
+func (f *repository) ListSecurityPolicy(ctx context.Context) (data response.F5ListSecurityPolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -170,7 +170,7 @@ func (f *f5Repository) ListSecurityPolicy(ctx context.Context) (data response.F5
 	return data, nil
 }
 
-func (f *f5Repository) ListServerTecnology(ctx context.Context) (data response.F5ListServerTecnology, err error) {
+func (f *repository) ListServerTecnology(ctx context.Context) (data response.F5ListServerTecnology, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/server-technologies", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -184,7 +184,7 @@ func (f *f5Repository) ListServerTecnology(ctx context.Context) (data response.F
 	return data, nil
 }
 
-func (f *f5Repository) ListServerTecnologyInPolicy(ctx context.Context, policyID string) (data response.F5ListServerTecnologyInPolicy, err error) {
+func (f *repository) ListServerTecnologyInPolicy(ctx context.Context, policyID string) (data response.F5ListServerTecnologyInPolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/server-technologies", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -198,7 +198,7 @@ func (f *f5Repository) ListServerTecnologyInPolicy(ctx context.Context, policyID
 	return data, nil
 }
 
-func (f *f5Repository) AssignSecurityPolicyToVS(ctx context.Context, policyID string, req request.F5AssignSecurityPolicyToVS) (data response.F5AssignSecurityPolicyToVS, err error) {
+func (f *repository) AssignSecurityPolicyToVS(ctx context.Context, policyID string, req request.F5AssignSecurityPolicyToVS) (data response.F5AssignSecurityPolicyToVS, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -212,7 +212,7 @@ func (f *f5Repository) AssignSecurityPolicyToVS(ctx context.Context, policyID st
 	return data, nil
 }
 
-func (f *f5Repository) AssignServerTecnologyToSecurityPolicy(ctx context.Context, policyID string, req request.F5AssignServerTecnologyToSecurityPolicy) (data response.F5AssignServerTecnologyToSecurityPolicy, err error) {
+func (f *repository) AssignServerTecnologyToSecurityPolicy(ctx context.Context, policyID string, req request.F5AssignServerTecnologyToSecurityPolicy) (data response.F5AssignServerTecnologyToSecurityPolicy, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/server-technologies", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -226,7 +226,7 @@ func (f *f5Repository) AssignServerTecnologyToSecurityPolicy(ctx context.Context
 	return data, nil
 }
 
-func (f *f5Repository) SetLearningModePolicy(ctx context.Context, policyID string, req request.F5SetLearningModePolicy) (data response.F5SetLearningModePolicy, err error) {
+func (f *repository) SetLearningModePolicy(ctx context.Context, policyID string, req request.F5SetLearningModePolicy) (data response.F5SetLearningModePolicy, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/policy-builder", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -240,7 +240,7 @@ func (f *f5Repository) SetLearningModePolicy(ctx context.Context, policyID strin
 	return data, nil
 }
 
-func (f *f5Repository) GetLearningModePolicy(ctx context.Context, policyID string) (data response.F5GetLearningModePolicy, err error) {
+func (f *repository) GetLearningModePolicy(ctx context.Context, policyID string) (data response.F5GetLearningModePolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/policy-builder", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -254,7 +254,7 @@ func (f *f5Repository) GetLearningModePolicy(ctx context.Context, policyID strin
 	return data, nil
 }
 
-func (f *f5Repository) GetSecurityPolicy(ctx context.Context, policyID string) (data response.F5GetSecurityPolicy, err error) {
+func (f *repository) GetSecurityPolicy(ctx context.Context, policyID string) (data response.F5GetSecurityPolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -268,7 +268,7 @@ func (f *f5Repository) GetSecurityPolicy(ctx context.Context, policyID string) (
 	return data, nil
 }
 
-func (f *f5Repository) ListBotDefense(ctx context.Context) (data response.F5ListBotDefense, err error) {
+func (f *repository) ListBotDefense(ctx context.Context) (data response.F5ListBotDefense, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/bot-defense/profile", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -282,7 +282,7 @@ func (f *f5Repository) ListBotDefense(ctx context.Context) (data response.F5List
 	return data, nil
 }
 
-func (f *f5Repository) GetBotDefense(ctx context.Context, fullpath string) (data response.F5BotDefense, err error) {
+func (f *repository) GetBotDefense(ctx context.Context, fullpath string) (data response.F5BotDefense, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/bot-defense/profile/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -296,7 +296,7 @@ func (f *f5Repository) GetBotDefense(ctx context.Context, fullpath string) (data
 	return data, nil
 }
 
-func (f *f5Repository) ListLogProfile(ctx context.Context) (data response.F5ListLogProfile, err error) {
+func (f *repository) ListLogProfile(ctx context.Context) (data response.F5ListLogProfile, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/log/profile", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -310,7 +310,7 @@ func (f *f5Repository) ListLogProfile(ctx context.Context) (data response.F5List
 	return data, nil
 }
 
-func (f *f5Repository) GetLogProfile(ctx context.Context, fullpath string) (data response.F5LogProfile, err error) {
+func (f *repository) GetLogProfile(ctx context.Context, fullpath string) (data response.F5LogProfile, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/log/profile/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -324,7 +324,7 @@ func (f *f5Repository) GetLogProfile(ctx context.Context, fullpath string) (data
 	return data, nil
 }
 
-func (f *f5Repository) AttachBotDefenseandLogProfileToVS(ctx context.Context, fullpath string, req request.F5AttachBotDefenseandLogProfileToVS) (data response.F5AttachBotDefenseandLogProfileToVS, err error) {
+func (f *repository) AttachBotDefenseandLogProfileToVS(ctx context.Context, fullpath string, req request.F5AttachBotDefenseandLogProfileToVS) (data response.F5AttachBotDefenseandLogProfileToVS, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -338,7 +338,7 @@ func (f *f5Repository) AttachBotDefenseandLogProfileToVS(ctx context.Context, fu
 	return data, nil
 }
 
-func (f *f5Repository) Upload(ctx context.Context, fileReq *multipart.FileHeader) (data response.F5Upload, err error) {
+func (f *repository) Upload(ctx context.Context, name string, fileReq *multipart.FileHeader) (data response.F5Upload, err error) {
 	if fileReq == nil {
 		return data, fmt.Errorf("upload failed: file is nil")
 	}
@@ -349,7 +349,7 @@ func (f *f5Repository) Upload(ctx context.Context, fileReq *multipart.FileHeader
 	}
 	defer file.Close()
 
-	res, err := httpclient.PostReader(ctx, fmt.Sprintf("%s/mgmt/shared/file-transfer/uploads/%s", os.Getenv("F5_URL"), url.PathEscape(fileReq.Filename)),
+	res, err := httpclient.PostReader(ctx, fmt.Sprintf("%s/mgmt/shared/file-transfer/uploads/%s", os.Getenv("F5_URL"), name),
 		map[string]string{
 			"Content-Type":    "application/octet-stream",
 			"Content-Range":   fmt.Sprintf("0-%d/%d", fileReq.Size, fileReq.Size),
@@ -369,7 +369,7 @@ func (f *f5Repository) Upload(ctx context.Context, fileReq *multipart.FileHeader
 	return data, nil
 }
 
-func (f *f5Repository) InstallCertOrChain(ctx context.Context, req request.F5Install) (data response.F5Install, err error) {
+func (f *repository) InstallCertOrChain(ctx context.Context, req request.F5Install) (data response.F5Install, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/cert", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -385,7 +385,7 @@ func (f *f5Repository) InstallCertOrChain(ctx context.Context, req request.F5Ins
 	return data, nil
 }
 
-func (f *f5Repository) InstallKey(ctx context.Context, req request.F5Install) (data response.F5Install, err error) {
+func (f *repository) InstallKey(ctx context.Context, req request.F5Install) (data response.F5Install, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/key", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -401,7 +401,7 @@ func (f *f5Repository) InstallKey(ctx context.Context, req request.F5Install) (d
 	return data, nil
 }
 
-func (f *f5Repository) ListCertAndChain(ctx context.Context) (data response.F5ListCertAndChain, err error) {
+func (f *repository) ListCertAndChain(ctx context.Context) (data response.F5ListCertAndChain, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/cert", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -417,7 +417,7 @@ func (f *f5Repository) ListCertAndChain(ctx context.Context) (data response.F5Li
 	return data, nil
 }
 
-func (f *f5Repository) GetCertAndChain(ctx context.Context, fullpath string) (data response.F5CertAndChain, err error) {
+func (f *repository) GetCertAndChain(ctx context.Context, fullpath string) (data response.F5CertAndChain, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/cert/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -433,7 +433,7 @@ func (f *f5Repository) GetCertAndChain(ctx context.Context, fullpath string) (da
 	return data, nil
 }
 
-func (f *f5Repository) ListKey(ctx context.Context) (data response.F5ListKey, err error) {
+func (f *repository) ListKey(ctx context.Context) (data response.F5ListKey, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/key", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -449,7 +449,7 @@ func (f *f5Repository) ListKey(ctx context.Context) (data response.F5ListKey, er
 	return data, nil
 }
 
-func (f *f5Repository) GetKey(ctx context.Context, fullpath string) (data response.F5Key, err error) {
+func (f *repository) GetKey(ctx context.Context, fullpath string) (data response.F5Key, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/key/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -465,7 +465,7 @@ func (f *f5Repository) GetKey(ctx context.Context, fullpath string) (data respon
 	return data, nil
 }
 
-func (f *f5Repository) CreateSslSecurityProfile(ctx context.Context, req request.F5CreateSslSecurityProfile) (data response.F5CreateSslSecurityProfile, err error) {
+func (f *repository) CreateSslSecurityProfile(ctx context.Context, req request.F5CreateSslSecurityProfile) (data response.F5CreateSslSecurityProfile, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -481,7 +481,7 @@ func (f *f5Repository) CreateSslSecurityProfile(ctx context.Context, req request
 	return data, nil
 }
 
-func (f *f5Repository) ActiveSNI(ctx context.Context, fullpath string, req request.F5ActiveSNI) (data response.F5ActiveSNI, err error) {
+func (f *repository) ActiveSNI(ctx context.Context, fullpath string, req request.F5ActiveSNI) (data response.F5ActiveSNI, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -497,7 +497,7 @@ func (f *f5Repository) ActiveSNI(ctx context.Context, fullpath string, req reque
 	return data, nil
 }
 
-func (f *f5Repository) ListSNI(ctx context.Context) (data response.F5ListSNI, err error) {
+func (f *repository) ListSNI(ctx context.Context) (data response.F5ListSNI, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -513,7 +513,7 @@ func (f *f5Repository) ListSNI(ctx context.Context) (data response.F5ListSNI, er
 	return data, nil
 }
 
-func (f *f5Repository) GetSNI(ctx context.Context, fullpath string) (data response.F5SNI, err error) {
+func (f *repository) GetSNI(ctx context.Context, fullpath string) (data response.F5SNI, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -529,7 +529,7 @@ func (f *f5Repository) GetSNI(ctx context.Context, fullpath string) (data respon
 	return data, nil
 }
 
-func (f *f5Repository) CreateVS(ctx context.Context, req request.F5CreateVS) (data response.F5VS, err error) {
+func (f *repository) CreateVS(ctx context.Context, req request.F5CreateVS) (data response.F5VS, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -543,7 +543,7 @@ func (f *f5Repository) CreateVS(ctx context.Context, req request.F5CreateVS) (da
 	return data, nil
 }
 
-func (f *f5Repository) ListVS(ctx context.Context) (data response.F5ListVS, err error) {
+func (f *repository) ListVS(ctx context.Context) (data response.F5ListVS, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -557,7 +557,7 @@ func (f *f5Repository) ListVS(ctx context.Context) (data response.F5ListVS, err 
 	return data, nil
 }
 
-func (f *f5Repository) GetVS(ctx context.Context, fullpath string) (data response.F5VS, err error) {
+func (f *repository) GetVS(ctx context.Context, fullpath string) (data response.F5VS, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,
@@ -571,7 +571,7 @@ func (f *f5Repository) GetVS(ctx context.Context, fullpath string) (data respons
 	return data, nil
 }
 
-func (f *f5Repository) VerifySSLInVS(ctx context.Context, fullpath string) (data response.F5VerifySSLInVS, err error) {
+func (f *repository) VerifySSLInVS(ctx context.Context, fullpath string) (data response.F5VerifySSLInVS, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual/%s/profiles", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": Token,

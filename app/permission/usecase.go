@@ -18,20 +18,20 @@ type Usecase interface {
 	CheckUserPrivilege(c *gin.Context, privilegeName string, requireEditorAccess bool) bool
 }
 
-type permissionUsecase struct {
+type usecase struct {
 	projectRepo project.Repository
 	userRepo    user.Repository
 }
 
-func NewPermissionUsecase(projectRepo project.Repository, userRepo user.Repository) Usecase {
-	return &permissionUsecase{
+func NewUsecase(projectRepo project.Repository, userRepo user.Repository) Usecase {
+	return &usecase{
 		projectRepo: projectRepo,
 		userRepo:    userRepo,
 	}
 }
 
 // CheckUserPermission checks if the user has the required privileges to perform the action.
-func (u *permissionUsecase) CheckUserPermission(c *gin.Context, projectID, privilegeName string, requireEditorAccess bool) bool {
+func (u *usecase) CheckUserPermission(c *gin.Context, projectID, privilegeName string, requireEditorAccess bool) bool {
 	userID := middleware.GetUserID(c)
 	userRole := middleware.GetUserRole(c)
 
@@ -79,7 +79,7 @@ func (u *permissionUsecase) CheckUserPermission(c *gin.Context, projectID, privi
 	return false
 }
 
-func (u *permissionUsecase) CheckUserPrivilege(c *gin.Context, privilegeName string, requireEditorAccess bool) bool {
+func (u *usecase) CheckUserPrivilege(c *gin.Context, privilegeName string, requireEditorAccess bool) bool {
 	userID := middleware.GetUserID(c)
 	userRole := middleware.GetUserRole(c)
 

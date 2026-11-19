@@ -14,15 +14,15 @@ type Repository interface {
 	GetAllUser() ([]model.User, error)
 }
 
-type userRepository struct {
+type repository struct {
 	connection *gorm.DB
 }
 
-func NewUserRepository(connection *gorm.DB) Repository {
-	return &userRepository{connection}
+func NewRepository(connection *gorm.DB) Repository {
+	return &repository{connection}
 }
 
-func (u *userRepository) GetUserByID(id string) (model.User, error) {
+func (u *repository) GetUserByID(id string) (model.User, error) {
 	var user model.User
 	err := u.connection.
 		Preload("Organization").
@@ -35,7 +35,7 @@ func (u *userRepository) GetUserByID(id string) (model.User, error) {
 	return user, nil
 }
 
-func (u *userRepository) GetSuperAdminPrivilegesByID(id string) ([]model.SuperAdminRoles, error) {
+func (u *repository) GetSuperAdminPrivilegesByID(id string) ([]model.SuperAdminRoles, error) {
 	var superAdminRoles []model.SuperAdminRoles
 	err := u.connection.
 		Joins("JOIN super_admin_role_mapping srm ON srm.id_role = super_admin_roles.id").
@@ -48,7 +48,7 @@ func (u *userRepository) GetSuperAdminPrivilegesByID(id string) ([]model.SuperAd
 	return superAdminRoles, nil
 }
 
-func (u *userRepository) GetAllUser() ([]model.User, error) {
+func (u *repository) GetAllUser() ([]model.User, error) {
 	var (
 		users []model.User
 	)

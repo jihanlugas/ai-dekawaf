@@ -1,9 +1,9 @@
 package f5
 
 import (
+	"ai-dekawaf/request"
 	"bytes"
 	"context"
-	"ai-dekawaf/request"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -51,7 +51,7 @@ func TestVirtualServerOperations(t *testing.T) {
 	oldToken := Token
 	Token = "test-token"
 	t.Cleanup(func() { Token = oldToken })
-	repo := NewF5Repository()
+	repo := NewRepository()
 	ctx := context.Background()
 
 	created, err := repo.CreateVS(ctx, request.F5CreateVS{
@@ -85,7 +85,7 @@ func TestVirtualServerErrors(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("F5_URL", server.URL)
-	repo := NewF5Repository()
+	repo := NewRepository()
 	ctx := context.Background()
 
 	operations := []struct {
@@ -128,7 +128,7 @@ func TestLoginResponseHandling(t *testing.T) {
 	Token = "old-token"
 	t.Cleanup(func() { Token = oldToken })
 
-	repo := NewF5Repository()
+	repo := NewRepository()
 	if err := repo.Login(context.Background()); err != nil || Token != "new-token" {
 		t.Fatalf("login: token %q, error %v", Token, err)
 	}
@@ -172,14 +172,14 @@ func TestUploadResponseHandling(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("F5_URL", server.URL)
-	repo := NewF5Repository()
+	repo := NewRepository()
 	file := form.File["file"][0]
-	data, err := repo.Upload(context.Background(), file)
+	data, err := repo.Upload(context.Background(), "test.crt", file)
 	if err != nil || data.TemporaryFilePath != "/tmp/test.crt" {
 		t.Fatalf("upload: %+v, %v", data, err)
 	}
 	status, body = http.StatusBadRequest, `{}`
-	if _, err := repo.Upload(context.Background(), file); err == nil || err.Error() != "upload failed with status code: 400" {
+	if _, err := repo.Upload(context.Background(), "test.crt", file); err == nil || err.Error() != "upload failed with status code: 400" {
 		t.Fatalf("upload error: %v", err)
 	}
 }
@@ -193,7 +193,7 @@ func TestCreateNodeResponseHandling(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("F5_URL", server.URL)
-	repo := NewF5Repository()
+	repo := NewRepository()
 	data, err := repo.CreateNode(context.Background(), request.F5CreateNode{Name: "test-node"})
 	if err != nil || data.Name != "test-node" || data.Address != "192.0.2.1" {
 		t.Fatalf("create node: %+v, %v", data, err)
@@ -246,7 +246,7 @@ func TestPoolMemberAndSecurityPolicy(t *testing.T) {
 	oldToken := Token
 	Token = "test-token"
 	t.Cleanup(func() { Token = oldToken })
-	repo := NewF5Repository()
+	repo := NewRepository()
 	ctx := context.Background()
 
 	member, err := repo.GetMemberPool(ctx, "~Common~pool/name", "~Common~node:443")
@@ -273,7 +273,7 @@ func TestPoolMemberAndSecurityPolicyErrors(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("F5_URL", server.URL)
-	repo := NewF5Repository()
+	repo := NewRepository()
 	ctx := context.Background()
 	tests := []struct {
 		want string
@@ -312,7 +312,7 @@ func TestSecurityPolicyAndServerTechnologyLists(t *testing.T) {
 	oldToken := Token
 	Token = "test-token"
 	t.Cleanup(func() { Token = oldToken })
-	repo := NewF5Repository()
+	repo := NewRepository()
 	ctx := context.Background()
 
 	policies, err := repo.ListSecurityPolicy(ctx)
@@ -358,7 +358,7 @@ func TestSecurityPolicyAndServerTechnologyListErrors(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("F5_URL", server.URL)
-	repo := NewF5Repository()
+	repo := NewRepository()
 	ctx := context.Background()
 	tests := []struct {
 		want string
@@ -400,7 +400,7 @@ func TestPolicyAndDefenseOperations(t *testing.T) {
 	oldToken := Token
 	Token = "test-token"
 	t.Cleanup(func() { Token = oldToken })
-	repo := NewF5Repository()
+	repo := NewRepository()
 	ctx := context.Background()
 	const policyPath = "/mgmt/tm/asm/policies/policy%2Fid"
 	tests := []struct {

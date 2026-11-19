@@ -17,15 +17,15 @@ type Repository interface {
 	InfoToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error
 }
 
-type auditlogRepository struct {
+type repository struct {
 	connection *gorm.DB
 }
 
-func NewUserRepository(connection *gorm.DB) Repository {
-	return &auditlogRepository{connection}
+func NewRepository(connection *gorm.DB) Repository {
+	return &repository{connection}
 }
 
-func (a *auditlogRepository) ErrorToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
+func (a *repository) ErrorToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
 	var req = request.Auditlog{
 		UserID:         userID,
 		OrganizationID: orgID,
@@ -44,7 +44,7 @@ func (a *auditlogRepository) ErrorToLog(userID string, orgID string, projectID s
 	return a.insertLogToAuditlog(req)
 }
 
-func (a *auditlogRepository) InfoToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
+func (a *repository) InfoToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
 	var req = request.Auditlog{
 		UserID:         userID,
 		OrganizationID: orgID,
@@ -63,7 +63,7 @@ func (a *auditlogRepository) InfoToLog(userID string, orgID string, projectID st
 	return a.insertLogToAuditlog(req)
 }
 
-func (a *auditlogRepository) insertLogToAuditlog(req request.Auditlog) error {
+func (a *repository) insertLogToAuditlog(req request.Auditlog) error {
 	var audit = model.Auditlog{}
 	u, err := uuid.NewRandom()
 	if err != nil {
