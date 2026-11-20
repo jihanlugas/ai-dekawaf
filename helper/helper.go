@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func GetIP(c *gin.Context) string {
@@ -35,4 +36,13 @@ func GetIP(c *gin.Context) string {
 		return ip
 	}
 	return ""
+}
+
+func GetUniqueID() string {
+	uuid := uuid.New().String()
+	return uuid
+}
+
+func GenerateRandomStringUUID8() string {
+	return uuid.New().String()[:8]
 }

@@ -37,6 +37,7 @@ func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecuri
 }
 
 func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) {
+	var err error
 	resNode, err := helper.LogF5Request("CreateNode", func() (response.F5CreateNode, error) {
 		return u.f5Repo.CreateNode(c, request.F5CreateNode{
 			Name:    req.Node,
@@ -44,7 +45,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error creating F5 node:", err)
 		return
 	}
 
@@ -61,7 +61,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error creating F5 pool:", err)
 		return
 	}
 
@@ -70,28 +69,8 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		return u.f5Repo.Upload(c, crtName, req.CertificateFile)
 	})
 	if err != nil {
-		fmt.Println("Error uploading certificate:", err)
 		return
 	}
-
-	chainName := fmt.Sprintf("%s-chain.crt", helper.Slugify(req.Name))
-	resUploadChain, err := helper.LogF5Request("UploadChain", func() (response.F5Upload, error) {
-		return u.f5Repo.Upload(c, chainName, req.ChainFile)
-	})
-	if err != nil {
-		fmt.Println("Error uploading chain file:", err)
-		return
-	}
-
-	keyName := fmt.Sprintf("%s.key", helper.Slugify(req.Name))
-	resUploadKey, err := helper.LogF5Request("UploadKey", func() (response.F5Upload, error) {
-		return u.f5Repo.Upload(c, keyName, req.KeyFile)
-	})
-	if err != nil {
-		fmt.Println("Error uploading key file:", err)
-		return
-	}
-
 	_, err = helper.LogF5Request("InstallCert", func() (response.F5Install, error) {
 		return u.f5Repo.InstallCertOrChain(c, request.F5Install{
 			Command:       "install",
@@ -100,18 +79,34 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error installing certificate:", err)
 		return
 	}
-	_, err = helper.LogF5Request("InstallChain", func() (response.F5Install, error) {
-		return u.f5Repo.InstallCertOrChain(c, request.F5Install{
-			Command:       "install",
-			Name:          chainName,
-			FromLocalFile: resUploadChain.LocalFilePath,
+
+	chainName := fmt.Sprintf("%s-chain.crt", helper.Slugify(req.Name))
+	if req.ChainFile != nil {
+		resUploadChain, err := helper.LogF5Request("UploadChain", func() (response.F5Upload, error) {
+			return u.f5Repo.Upload(c, chainName, req.ChainFile)
 		})
+		if err != nil {
+			return
+		}
+		_, err = helper.LogF5Request("InstallChain", func() (response.F5Install, error) {
+			return u.f5Repo.InstallCertOrChain(c, request.F5Install{
+				Command:       "install",
+				Name:          chainName,
+				FromLocalFile: resUploadChain.LocalFilePath,
+			})
+		})
+		if err != nil {
+			return
+		}
+	}
+
+	keyName := fmt.Sprintf("%s.key", helper.Slugify(req.Name))
+	resUploadKey, err := helper.LogF5Request("UploadKey", func() (response.F5Upload, error) {
+		return u.f5Repo.Upload(c, keyName, req.KeyFile)
 	})
 	if err != nil {
-		fmt.Println("Error installing chain file:", err)
 		return
 	}
 	_, err = helper.LogF5Request("InstallKey", func() (response.F5Install, error) {
@@ -122,31 +117,37 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error installing key file:", err)
 		return
 	}
 
+	var CertKeyChain []struct {
+		Name  string `json:"name"`
+		Cert  string `json:"cert"`
+		Key   string `json:"key"`
+		Chain string `json:"chain"`
+	}
+	CertKeyChain = append(CertKeyChain, struct {
+		Name  string `json:"name"`
+		Cert  string `json:"cert"`
+		Key   string `json:"key"`
+		Chain string `json:"chain"`
+	}{
+		Name:  helper.Slugify(req.Name),
+		Cert:  crtName,
+		Key:   keyName,
+		Chain: chainName,
+	})
+	if req.ChainFile == nil {
+		CertKeyChain[0].Chain = ""
+	}
 	resCreateSslSecurityProfile, err := helper.LogF5Request("CreateSslSecurityProfile", func() (response.F5CreateSslSecurityProfile, error) {
 		return u.f5Repo.CreateSslSecurityProfile(c, request.F5CreateSslSecurityProfile{
 			Name:         fmt.Sprintf("%s-client-ssl", helper.Slugify(req.Name)),
 			DefaultsFrom: "clientssl",
-			CertKeyChain: []struct {
-				Name  string `json:"name"`
-				Cert  string `json:"cert"`
-				Key   string `json:"key"`
-				Chain string `json:"chain"`
-			}{
-				{
-					Name:  helper.Slugify(req.Name),
-					Cert:  fmt.Sprintf("%s", crtName),
-					Key:   fmt.Sprintf("%s", keyName),
-					Chain: fmt.Sprintf("%s", chainName),
-				},
-			},
+			CertKeyChain: CertKeyChain,
 		})
 	})
 	if err != nil {
-		fmt.Println("Error creating SSL security profile:", err)
 		return
 	}
 
@@ -157,7 +158,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error activating SNI:", err)
 		return
 	}
 
@@ -182,7 +182,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error creating virtual server:", err)
 		return
 	}
 
@@ -209,7 +208,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			PolicyBuilderEnabled: true,
 		}
 	default:
-		fmt.Println("Unknown enforcement mode:", req.EnforcementMode)
 		return
 	}
 
@@ -217,7 +215,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		return u.f5Repo.CreateSecurityPolicy(c, reqF5)
 	})
 	if err != nil {
-		fmt.Println("Error creating security policy:", err)
 		return
 	}
 
@@ -229,7 +226,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error assigning security policy to virtual server:", err)
 		return
 	}
 
@@ -242,7 +238,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			})
 		})
 		if err != nil {
-			fmt.Println("Error assigning server technology to security policy:", err)
 			return
 		}
 	}
@@ -253,7 +248,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		fmt.Println("Error setting learning mode policy:", err)
 		return
 	}
 
@@ -270,7 +264,6 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		return u.f5Repo.AttachBotDefenseandLogProfileToVS(c, resCreateVS.FullPath, reqAttachBotDefense)
 	})
 	if err != nil {
-		fmt.Println("Error attaching bot defense and log profile to virtual server:", err)
 		return
 	}
 

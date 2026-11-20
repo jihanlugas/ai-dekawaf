@@ -46,17 +46,17 @@ func (h *Handler) Page(c *gin.Context) {
 // @Tags Security Profile
 // @Accept multipart/form-data
 // @Produce json
-// @Param name formData string false "Name"
+// @Param name formData string true "Name"
 // @Param description formData string false "Description"
-// @Param domain formData string false "Domain"
-// @Param node formData string false "Node"
-// @Param pool formData string false "Pool"
-// @Param port formData string false "Port"
+// @Param domain formData string true "Domain"
+// @Param node formData string true "Node"
+// @Param pool formData string true "Pool"
+// @Param port formData string true "Port"
 // @Param serverTechnologies formData []string false "Server technologies" collectionFormat(multi)
-// @Param enforcementMode formData string false "Enforcement mode"
+// @Param enforcementMode formData string true "Enforcement mode"
 // @Param botProtection formData bool false "Bot protection"
-// @Param certificateFile formData file false "Certificate file"
-// @Param keyFile formData file false "Key file"
+// @Param certificateFile formData file true "Certificate file"
+// @Param keyFile formData file true "Key file"
 // @Param chainFile formData file false "Certificate chain file"
 // @Success 200 {object} response.Response
 // @Failure 400 {object} response.Response

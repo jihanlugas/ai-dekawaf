@@ -13,12 +13,14 @@ var regxSpecialChar *regexp.Regexp
 var regxXss *regexp.Regexp
 var regxAlphaDash *regexp.Regexp
 var regexAlphaSpace *regexp.Regexp
+var regxDomain *regexp.Regexp
 
 func init() {
 	regxSpecialChar = regexp.MustCompile(`^[a-zA-Z0-9\s_.-]+$`)
 	regxXss = regexp.MustCompile(`^[a-zA-Z0-9\s.,@+_=:/-]+$`)
 	regxAlphaDash = regexp.MustCompile(`^[a-zA-Z-]+$`)
 	regexAlphaSpace = regexp.MustCompile(`^[a-zA-Z\s]+$`)
+	regxDomain = regexp.MustCompile(`^(?i)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
 
 	// init validator
 	Validator = validator.New()
@@ -29,6 +31,7 @@ func init() {
 	_ = Validator.RegisterValidation("passwdComplex", checkPasswordComplexity)
 	_ = Validator.RegisterValidation("alphadash", alphaDash)
 	_ = Validator.RegisterValidation("alphaSpace", alphaSpace)
+	_ = Validator.RegisterValidation("domain", domain)
 }
 
 func specialchar(fl validator.FieldLevel) bool {
@@ -57,6 +60,13 @@ func alphaSpace(fl validator.FieldLevel) bool {
 		return true
 	}
 	return regexAlphaSpace.MatchString(fl.Field().String())
+}
+
+func domain(fl validator.FieldLevel) bool {
+	if fl.Field().String() == "" {
+		return true
+	}
+	return regxDomain.MatchString(fl.Field().String())
 }
 
 // Function to map validation errors to user-friendly messages

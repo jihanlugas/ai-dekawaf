@@ -9,6 +9,8 @@ import (
 	"ai-dekawaf/app/user"
 	"ai-dekawaf/database"
 	"ai-dekawaf/middleware"
+	"context"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -38,7 +40,11 @@ var (
 	securityprofileHandler securityprofile.Handler = securityprofile.NewHandler(securityprofileUsecase, permissionUsecase, projectRepo)
 )
 
-func SetupRouter() *gin.Engine {
+func SetupRouter() (*gin.Engine, error) {
+	if err := f5Repo.Login(context.Background()); err != nil {
+		return nil, fmt.Errorf("initialize F5 authentication: %w", err)
+	}
+
 	// websocket.InitHandler()
 
 	r := gin.Default()
@@ -61,7 +67,7 @@ func SetupRouter() *gin.Engine {
 	rSecurityProfile.GET("", securityprofileHandler.Page)
 	rSecurityProfile.POST("", securityprofileHandler.Create)
 
-	return r
+	return r, nil
 }
 
 func CORSMiddleware() gin.HandlerFunc {

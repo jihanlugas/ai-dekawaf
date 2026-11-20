@@ -39,7 +39,10 @@ func main() {
 		database.RunSeeder()
 	}
 
-	r := router.SetupRouter()
+	r, err := router.SetupRouter()
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err := r.Run(fmt.Sprintf(":%s", os.Getenv("APP_PORT"))); err != nil {
 		log.Fatal(err)
 	}

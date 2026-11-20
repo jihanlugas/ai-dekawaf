@@ -66,7 +66,8 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Name",
                         "name": "name",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "string",
@@ -78,25 +79,29 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Domain",
                         "name": "domain",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "string",
                         "description": "Node",
                         "name": "node",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "string",
                         "description": "Pool",
                         "name": "pool",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "string",
                         "description": "Port",
                         "name": "port",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "array",
@@ -112,7 +117,8 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Enforcement mode",
                         "name": "enforcementMode",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "boolean",
@@ -124,19 +130,22 @@ const docTemplate = `{
                         "type": "file",
                         "description": "Certificate file",
                         "name": "certificateFile",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "file",
                         "description": "Key file",
                         "name": "keyFile",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     },
                     {
                         "type": "file",
                         "description": "Certificate chain file",
                         "name": "chainFile",
-                        "in": "formData"
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {

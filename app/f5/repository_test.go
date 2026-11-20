@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestVirtualServerOperations(t *testing.T) {
@@ -117,7 +119,7 @@ func TestVirtualServerErrors(t *testing.T) {
 
 func TestLoginResponseHandling(t *testing.T) {
 	status := http.StatusOK
-	body := `{"token":{"token":"new-token"}}`
+	body := `{"token":{"token":"new-token","timeout":1200}}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
@@ -129,16 +131,53 @@ func TestLoginResponseHandling(t *testing.T) {
 	t.Cleanup(func() { Token = oldToken })
 
 	repo := NewRepository()
+	t.Cleanup(func() { repo.(*repository).stopTokenRefresh() })
 	if err := repo.Login(context.Background()); err != nil || Token != "new-token" {
 		t.Fatalf("login: token %q, error %v", Token, err)
 	}
 	status, body = http.StatusUnauthorized, `{"message":"invalid credentials"}`
-	if err := repo.Login(context.Background()); err == nil || err.Error() != "login failed: invalid credentials" || Token != "new-token" {
+	if err := repo.Login(context.Background()); err == nil || err.Error() != "F5 Unauthorized" || Token != "new-token" {
 		t.Fatalf("failed login: token %q, error %v", Token, err)
 	}
 	status, body = http.StatusOK, `invalid`
 	if err := repo.Login(context.Background()); err == nil || !strings.Contains(err.Error(), "failed to unmarshal login response") || Token != "new-token" {
 		t.Fatalf("invalid login response: token %q, error %v", Token, err)
+	}
+}
+
+func TestLoginRefreshesBeforeExpiration(t *testing.T) {
+	var loginCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := loginCount.Add(1)
+		expiresAt := time.Now().Add(350 * time.Millisecond)
+		if count > 1 {
+			expiresAt = time.Now().Add(time.Hour)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"token": map[string]any{
+				"token":            "new-token",
+				"expirationMicros": expiresAt.UnixMicro(),
+			},
+		})
+	}))
+	defer server.Close()
+	t.Setenv("F5_URL", server.URL)
+
+	repo := NewRepository()
+	t.Cleanup(func() { repo.(*repository).stopTokenRefresh() })
+	if err := repo.Login(context.Background()); err != nil {
+		t.Fatalf("initial login: %v", err)
+	}
+
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for loginCount.Load() < 2 {
+		select {
+		case <-deadline:
+			t.Fatal("expected token refresh before expiration")
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -163,10 +202,12 @@ func TestUploadResponseHandling(t *testing.T) {
 
 	status := http.StatusOK
 	body := `{"temporaryFilePath":"/tmp/test.crt"}`
+	var capturedContentRange string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/mgmt/shared/file-transfer/uploads/test.crt" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
+		capturedContentRange = r.Header.Get("Content-Range")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	}))
@@ -174,10 +215,19 @@ func TestUploadResponseHandling(t *testing.T) {
 	t.Setenv("F5_URL", server.URL)
 	repo := NewRepository()
 	file := form.File["file"][0]
+	
+	// Test successful upload and Content-Range calculation
 	data, err := repo.Upload(context.Background(), "test.crt", file)
 	if err != nil || data.TemporaryFilePath != "/tmp/test.crt" {
 		t.Fatalf("upload: %+v, %v", data, err)
 	}
+	
+	// Verify Content-Range is calculated from actual file size (11 bytes for "certificate")
+	expectedContentRange := "0-10/11"
+	if capturedContentRange != expectedContentRange {
+		t.Errorf("Content-Range mismatch: got %q, expected %q", capturedContentRange, expectedContentRange)
+	}
+	
 	status, body = http.StatusBadRequest, `{}`
 	if _, err := repo.Upload(context.Background(), "test.crt", file); err == nil || err.Error() != "upload failed with status code: 400" {
 		t.Fatalf("upload error: %v", err)

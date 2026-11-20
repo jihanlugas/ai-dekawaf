@@ -3,9 +3,11 @@ package httpclient
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -28,8 +30,15 @@ type Response struct {
 }
 
 func init() {
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+
 	client = &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: transport,
 	}
 }
 
@@ -38,7 +47,7 @@ func do(ctx context.Context, req Request) (*Response, error) {
 
 	if req.Reader != nil {
 		body = req.Reader
-		fmt.Printf("\n--- HTTP Request ---\n%s %s\nBody: (stream)\n", req.Method, req.URL)
+		log.Printf("--- HTTP Request ---\n%s %s\nBody: (stream)", req.Method, req.URL)
 	} else if req.Body != nil {
 		payload, err := json.Marshal(req.Body)
 		if err != nil {
@@ -46,9 +55,9 @@ func do(ctx context.Context, req Request) (*Response, error) {
 		}
 
 		body = bytes.NewBuffer(payload)
-		fmt.Printf("\n--- HTTP Request ---\n%s %s\nBody:\n%s\n", req.Method, req.URL, formatBody(payload))
+		log.Printf("--- HTTP Request ---\n%s %s\nBody:\n%s", req.Method, req.URL, formatBody(payload))
 	} else {
-		fmt.Printf("\n--- HTTP Request ---\n%s %s\nBody: (empty)\n", req.Method, req.URL)
+		log.Printf("--- HTTP Request ---\n%s %s\nBody: (empty)", req.Method, req.URL)
 	}
 
 	httpReq, err := http.NewRequestWithContext(
@@ -82,7 +91,7 @@ func do(ctx context.Context, req Request) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
-	fmt.Printf("--- HTTP Response ---\nStatus: %s\nBody:\n%s\n\n", httpResp.Status, formatBody(respBody))
+	log.Printf("--- HTTP Response ---\nStatus: %s\nBody:\n%s", httpResp.Status, formatBody(respBody))
 
 	return &Response{
 		StatusCode: httpResp.StatusCode,

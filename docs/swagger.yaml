@@ -48,6 +48,7 @@ paths:
       - description: Name
         in: formData
         name: name
+        required: true
         type: string
       - description: Description
         in: formData
@@ -56,18 +57,22 @@ paths:
       - description: Domain
         in: formData
         name: domain
+        required: true
         type: string
       - description: Node
         in: formData
         name: node
+        required: true
         type: string
       - description: Pool
         in: formData
         name: pool
+        required: true
         type: string
       - description: Port
         in: formData
         name: port
+        required: true
         type: string
       - collectionFormat: multi
         description: Server technologies
@@ -79,6 +84,7 @@ paths:
       - description: Enforcement mode
         in: formData
         name: enforcementMode
+        required: true
         type: string
       - description: Bot protection
         in: formData
@@ -87,14 +93,17 @@ paths:
       - description: Certificate file
         in: formData
         name: certificateFile
+        required: true
         type: file
       - description: Key file
         in: formData
         name: keyFile
+        required: true
         type: file
       - description: Certificate chain file
         in: formData
         name: chainFile
+        required: true
         type: file
       produces:
       - application/json

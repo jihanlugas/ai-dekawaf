@@ -7,9 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"mime/multipart"
+	"net/http"
 	"net/url"
 	"os"
+	"sync"
+	"time"
 )
 
 type Repository interface {
@@ -50,6 +54,9 @@ type Repository interface {
 }
 
 type repository struct {
+	loginMu      sync.Mutex
+	refreshMu    sync.Mutex
+	refreshTimer *time.Timer
 }
 
 func NewRepository() Repository {
@@ -58,7 +65,29 @@ func NewRepository() Repository {
 
 var Token string
 
+var tokenMu sync.RWMutex
+
+const (
+	tokenRefreshMaxLead    = time.Minute
+	tokenRefreshRetryDelay = 5 * time.Second
+)
+
+func currentToken() string {
+	tokenMu.RLock()
+	defer tokenMu.RUnlock()
+	return Token
+}
+
+func updateToken(token string) {
+	tokenMu.Lock()
+	defer tokenMu.Unlock()
+	Token = token
+}
+
 func (f *repository) Login(ctx context.Context) (err error) {
+	f.loginMu.Lock()
+	defer f.loginMu.Unlock()
+
 	var data response.F5Login
 	loginRequest := request.F5Login{
 		Username:          os.Getenv("F5_USERNAME"),
@@ -77,15 +106,68 @@ func (f *repository) Login(ctx context.Context) (err error) {
 		return err
 	}
 
-	Token = data.Token.Token
+	if data.Token.Token == "" {
+		return fmt.Errorf("login response did not include token")
+	}
 
+	expiresAt := time.Time{}
+	if data.Token.ExpirationMicros > 0 {
+		expiresAt = time.UnixMicro(data.Token.ExpirationMicros)
+	} else if data.Token.Timeout > 0 {
+		expiresAt = time.Now().Add(time.Duration(data.Token.Timeout) * time.Second)
+	}
+	if expiresAt.IsZero() {
+		return fmt.Errorf("login response did not include token expiration")
+	}
+
+	updateToken(data.Token.Token)
+	f.scheduleTokenRefresh(expiresAt)
 	return nil
+}
+
+func (f *repository) scheduleTokenRefresh(expiresAt time.Time) {
+	delay := time.Until(expiresAt)
+	if delay <= 0 {
+		delay = time.Second
+	} else {
+		lead := delay / 10
+		if lead > tokenRefreshMaxLead {
+			lead = tokenRefreshMaxLead
+		}
+		delay -= lead
+	}
+	f.scheduleLogin(delay)
+}
+
+func (f *repository) scheduleLogin(delay time.Duration) {
+	f.refreshMu.Lock()
+	defer f.refreshMu.Unlock()
+
+	if f.refreshTimer != nil {
+		f.refreshTimer.Stop()
+	}
+	f.refreshTimer = time.AfterFunc(delay, func() {
+		if err := f.Login(context.Background()); err != nil {
+			log.Printf("F5 token refresh failed; retrying in %s: %v", tokenRefreshRetryDelay, err)
+			f.scheduleLogin(tokenRefreshRetryDelay)
+		}
+	})
+}
+
+func (f *repository) stopTokenRefresh() {
+	f.refreshMu.Lock()
+	defer f.refreshMu.Unlock()
+
+	if f.refreshTimer != nil {
+		f.refreshTimer.Stop()
+		f.refreshTimer = nil
+	}
 }
 
 func (f *repository) CreateNode(ctx context.Context, req request.F5CreateNode) (data response.F5CreateNode, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/node", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -101,7 +183,7 @@ func (f *repository) CreateNode(ctx context.Context, req request.F5CreateNode) (
 func (f *repository) CreatePool(ctx context.Context, req request.F5CreatePool) (data response.F5CreatePool, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/pool", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -117,7 +199,7 @@ func (f *repository) CreatePool(ctx context.Context, req request.F5CreatePool) (
 func (f *repository) GetMemberPool(ctx context.Context, poolFullPath, memberFullPath string) (data response.F5MemberPool, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/pool/%s/members/%s", os.Getenv("F5_URL"), url.PathEscape(poolFullPath), url.PathEscape(memberFullPath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -131,7 +213,7 @@ func (f *repository) GetMemberPool(ctx context.Context, poolFullPath, memberFull
 func (f *repository) ListMemberPool(ctx context.Context, poolFullPath string) (data response.F5ListMemberPool, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/pool/%s/members", os.Getenv("F5_URL"), url.PathEscape(poolFullPath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -145,7 +227,7 @@ func (f *repository) ListMemberPool(ctx context.Context, poolFullPath string) (d
 func (f *repository) CreateSecurityPolicy(ctx context.Context, req request.F5CreateSecurityPolicy) (data response.F5CreateSecurityPolicy, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -159,7 +241,7 @@ func (f *repository) CreateSecurityPolicy(ctx context.Context, req request.F5Cre
 func (f *repository) ListSecurityPolicy(ctx context.Context) (data response.F5ListSecurityPolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -173,7 +255,7 @@ func (f *repository) ListSecurityPolicy(ctx context.Context) (data response.F5Li
 func (f *repository) ListServerTecnology(ctx context.Context) (data response.F5ListServerTecnology, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/server-technologies", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -187,7 +269,7 @@ func (f *repository) ListServerTecnology(ctx context.Context) (data response.F5L
 func (f *repository) ListServerTecnologyInPolicy(ctx context.Context, policyID string) (data response.F5ListServerTecnologyInPolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/server-technologies", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -201,7 +283,7 @@ func (f *repository) ListServerTecnologyInPolicy(ctx context.Context, policyID s
 func (f *repository) AssignSecurityPolicyToVS(ctx context.Context, policyID string, req request.F5AssignSecurityPolicyToVS) (data response.F5AssignSecurityPolicyToVS, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -215,7 +297,7 @@ func (f *repository) AssignSecurityPolicyToVS(ctx context.Context, policyID stri
 func (f *repository) AssignServerTecnologyToSecurityPolicy(ctx context.Context, policyID string, req request.F5AssignServerTecnologyToSecurityPolicy) (data response.F5AssignServerTecnologyToSecurityPolicy, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/server-technologies", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -229,7 +311,7 @@ func (f *repository) AssignServerTecnologyToSecurityPolicy(ctx context.Context, 
 func (f *repository) SetLearningModePolicy(ctx context.Context, policyID string, req request.F5SetLearningModePolicy) (data response.F5SetLearningModePolicy, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/policy-builder", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -243,7 +325,7 @@ func (f *repository) SetLearningModePolicy(ctx context.Context, policyID string,
 func (f *repository) GetLearningModePolicy(ctx context.Context, policyID string) (data response.F5GetLearningModePolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s/policy-builder", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -257,7 +339,7 @@ func (f *repository) GetLearningModePolicy(ctx context.Context, policyID string)
 func (f *repository) GetSecurityPolicy(ctx context.Context, policyID string) (data response.F5GetSecurityPolicy, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -271,7 +353,7 @@ func (f *repository) GetSecurityPolicy(ctx context.Context, policyID string) (da
 func (f *repository) ListBotDefense(ctx context.Context) (data response.F5ListBotDefense, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/bot-defense/profile", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -285,7 +367,7 @@ func (f *repository) ListBotDefense(ctx context.Context) (data response.F5ListBo
 func (f *repository) GetBotDefense(ctx context.Context, fullpath string) (data response.F5BotDefense, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/bot-defense/profile/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -299,7 +381,7 @@ func (f *repository) GetBotDefense(ctx context.Context, fullpath string) (data r
 func (f *repository) ListLogProfile(ctx context.Context) (data response.F5ListLogProfile, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/log/profile", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -313,7 +395,7 @@ func (f *repository) ListLogProfile(ctx context.Context) (data response.F5ListLo
 func (f *repository) GetLogProfile(ctx context.Context, fullpath string) (data response.F5LogProfile, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/security/log/profile/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -327,7 +409,7 @@ func (f *repository) GetLogProfile(ctx context.Context, fullpath string) (data r
 func (f *repository) AttachBotDefenseandLogProfileToVS(ctx context.Context, fullpath string, req request.F5AttachBotDefenseandLogProfileToVS) (data response.F5AttachBotDefenseandLogProfileToVS, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -349,14 +431,23 @@ func (f *repository) Upload(ctx context.Context, name string, fileReq *multipart
 	}
 	defer file.Close()
 
+	// Read actual file size instead of using fileReq.Size which may be inaccurate
+	fileSize, err := file.Seek(0, 2) // Seek to end to get size
+	if err != nil {
+		return data, fmt.Errorf("get file size: %w", err)
+	}
+	file.Seek(0, 0) // Reset to beginning for reading
+
+	contentRange := fmt.Sprintf("0-%d/%d", fileSize-1, fileSize)
+
 	res, err := httpclient.PostReader(ctx, fmt.Sprintf("%s/mgmt/shared/file-transfer/uploads/%s", os.Getenv("F5_URL"), name),
 		map[string]string{
 			"Content-Type":    "application/octet-stream",
-			"Content-Range":   fmt.Sprintf("0-%d/%d", fileReq.Size, fileReq.Size),
-			"X-F5-Auth-Token": Token,
+			"Content-Range":   contentRange,
+			"X-F5-Auth-Token": currentToken(),
 		},
 		file,
-		fileReq.Size,
+		fileSize,
 	)
 	if err != nil {
 		return data, err
@@ -372,7 +463,7 @@ func (f *repository) Upload(ctx context.Context, name string, fileReq *multipart
 func (f *repository) InstallCertOrChain(ctx context.Context, req request.F5Install) (data response.F5Install, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/cert", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -388,7 +479,7 @@ func (f *repository) InstallCertOrChain(ctx context.Context, req request.F5Insta
 func (f *repository) InstallKey(ctx context.Context, req request.F5Install) (data response.F5Install, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/key", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -404,7 +495,7 @@ func (f *repository) InstallKey(ctx context.Context, req request.F5Install) (dat
 func (f *repository) ListCertAndChain(ctx context.Context) (data response.F5ListCertAndChain, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/cert", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -420,7 +511,7 @@ func (f *repository) ListCertAndChain(ctx context.Context) (data response.F5List
 func (f *repository) GetCertAndChain(ctx context.Context, fullpath string) (data response.F5CertAndChain, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/cert/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -436,7 +527,7 @@ func (f *repository) GetCertAndChain(ctx context.Context, fullpath string) (data
 func (f *repository) ListKey(ctx context.Context) (data response.F5ListKey, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/key", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -452,7 +543,7 @@ func (f *repository) ListKey(ctx context.Context) (data response.F5ListKey, err 
 func (f *repository) GetKey(ctx context.Context, fullpath string) (data response.F5Key, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/key/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -468,7 +559,7 @@ func (f *repository) GetKey(ctx context.Context, fullpath string) (data response
 func (f *repository) CreateSslSecurityProfile(ctx context.Context, req request.F5CreateSslSecurityProfile) (data response.F5CreateSslSecurityProfile, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -484,7 +575,7 @@ func (f *repository) CreateSslSecurityProfile(ctx context.Context, req request.F
 func (f *repository) ActiveSNI(ctx context.Context, fullpath string, req request.F5ActiveSNI) (data response.F5ActiveSNI, err error) {
 	res, err := httpclient.Patch(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -500,7 +591,7 @@ func (f *repository) ActiveSNI(ctx context.Context, fullpath string, req request
 func (f *repository) ListSNI(ctx context.Context) (data response.F5ListSNI, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -516,7 +607,7 @@ func (f *repository) ListSNI(ctx context.Context) (data response.F5ListSNI, err 
 func (f *repository) GetSNI(ctx context.Context, fullpath string) (data response.F5SNI, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -532,7 +623,7 @@ func (f *repository) GetSNI(ctx context.Context, fullpath string) (data response
 func (f *repository) CreateVS(ctx context.Context, req request.F5CreateVS) (data response.F5VS, err error) {
 	res, err := httpclient.Post(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	}, req)
 	if err != nil {
 		return data, err
@@ -546,7 +637,7 @@ func (f *repository) CreateVS(ctx context.Context, req request.F5CreateVS) (data
 func (f *repository) ListVS(ctx context.Context) (data response.F5ListVS, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual", os.Getenv("F5_URL")), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -560,7 +651,7 @@ func (f *repository) ListVS(ctx context.Context) (data response.F5ListVS, err er
 func (f *repository) GetVS(ctx context.Context, fullpath string) (data response.F5VS, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual/%s", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -574,7 +665,7 @@ func (f *repository) GetVS(ctx context.Context, fullpath string) (data response.
 func (f *repository) VerifySSLInVS(ctx context.Context, fullpath string) (data response.F5VerifySSLInVS, err error) {
 	res, err := httpclient.Get(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual/%s/profiles", os.Getenv("F5_URL"), url.PathEscape(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
-		"X-F5-Auth-Token": Token,
+		"X-F5-Auth-Token": currentToken(),
 	})
 	if err != nil {
 		return data, err
@@ -587,6 +678,9 @@ func (f *repository) VerifySSLInVS(ctx context.Context, fullpath string) (data r
 
 func decodeF5Response(res *httpclient.Response, operation string, data interface{}) error {
 	if res.StatusCode >= 400 {
+		if res.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("F5 Unauthorized")
+		}
 		var f5Error response.F5Error
 		if err := json.Unmarshal(res.Body, &f5Error); err != nil || f5Error.Message == "" {
 			return fmt.Errorf("%s failed with status code: %d", operation, res.StatusCode)
