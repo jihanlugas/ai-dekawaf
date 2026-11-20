@@ -4,9 +4,11 @@ import (
 	"ai-dekawaf/httpclient"
 	"ai-dekawaf/request"
 	"ai-dekawaf/response"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -431,12 +433,12 @@ func (f *repository) Upload(ctx context.Context, name string, fileReq *multipart
 	}
 	defer file.Close()
 
-	// Read actual file size instead of using fileReq.Size which may be inaccurate
-	fileSize, err := file.Seek(0, 2) // Seek to end to get size
+	// Read all file content to get actual size (multipart.FileHeader.Size may be inaccurate)
+	fileContent, err := io.ReadAll(file)
 	if err != nil {
-		return data, fmt.Errorf("get file size: %w", err)
+		return data, fmt.Errorf("read file: %w", err)
 	}
-	file.Seek(0, 0) // Reset to beginning for reading
+	fileSize := int64(len(fileContent))
 
 	contentRange := fmt.Sprintf("0-%d/%d", fileSize-1, fileSize)
 
@@ -446,7 +448,7 @@ func (f *repository) Upload(ctx context.Context, name string, fileReq *multipart
 			"Content-Range":   contentRange,
 			"X-F5-Auth-Token": currentToken(),
 		},
-		file,
+		bytes.NewReader(fileContent),
 		fileSize,
 	)
 	if err != nil {
