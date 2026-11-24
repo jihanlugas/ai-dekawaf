@@ -9,6 +9,7 @@ type CreateSecurityProfile struct {
 	Node              string                `json:"node" form:"node" validate:"required,specialchar,lowercase"`
 	Pool              string                `json:"pool" form:"pool" validate:"required,specialchar,lowercase"`
 	Port              string                `json:"port" form:"port" validate:"required,numeric"`
+	Destination       string                `json:"destination" form:"destination" validate:"required,ipv4"`
 	ServerTecnologies []string              `json:"serverTechnologies" form:"serverTechnologies"`
 	EnforcementMode   string                `json:"enforcementMode" form:"enforcementMode" validate:"required,oneof=transparent blocking"`
 	BotProtection     bool                  `json:"botProtection" form:"botProtection"`

@@ -14,6 +14,10 @@ type SecurityProfile struct {
 	Domain          string         `gorm:"not null"`
 	Node            string         `gorm:"not null"`
 	Pool            string         `gorm:"not null"`
+	VirtualServer   string         `gorm:"not null"`
+	Destination     string         `gorm:"not null"`
+	Policy          string         `gorm:"not null"`
+	ClientSSL       string         `gorm:"not null"`
 	EnforcementMode string         `gorm:"not null"`
 	BotProtection   bool           `gorm:"not null"`
 	CreatedAt       time.Time      `gorm:"not null"`
@@ -41,5 +45,5 @@ func (securityProfile *SecurityProfile) BeforeUpdate(tx *gorm.DB) (err error) {
 }
 
 func (SecurityProfile) TableName() string {
-	return "public.security_profiles"
+	return "dekawaf.security_profiles"
 }

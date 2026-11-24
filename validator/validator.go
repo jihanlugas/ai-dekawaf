@@ -14,13 +14,17 @@ var regxXss *regexp.Regexp
 var regxAlphaDash *regexp.Regexp
 var regexAlphaSpace *regexp.Regexp
 var regxDomain *regexp.Regexp
+var regxIpv4 *regexp.Regexp
+var regxIpv4Port *regexp.Regexp
 
 func init() {
-	regxSpecialChar = regexp.MustCompile(`^[a-zA-Z0-9\s_.-]+$`)
-	regxXss = regexp.MustCompile(`^[a-zA-Z0-9\s.,@+_=:/-]+$`)
-	regxAlphaDash = regexp.MustCompile(`^[a-zA-Z-]+$`)
-	regexAlphaSpace = regexp.MustCompile(`^[a-zA-Z\s]+$`)
-	regxDomain = regexp.MustCompile(`^(?i)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
+	regxSpecialChar = regexp.MustCompile(`^[a-zA-Z0-9\s_.-]+$`)                                                                                                                                                                 // allow letters, numbers, spaces, underscores, dots, and dashes
+	regxXss = regexp.MustCompile(`^[a-zA-Z0-9\s.,@+_=:/-]+$`)                                                                                                                                                                   // allow letters, numbers, spaces, and common punctuation
+	regxAlphaDash = regexp.MustCompile(`^[a-zA-Z-]+$`)                                                                                                                                                                          // allow letters and dashes
+	regexAlphaSpace = regexp.MustCompile(`^[a-zA-Z\s]+$`)                                                                                                                                                                       // allow letters and spaces
+	regxDomain = regexp.MustCompile(`^(?i)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)                                                                                                                                 // allow case-insensitive domain names with valid labels and 2-63 letter TLDs
+	regxIpv4 = regexp.MustCompile(`^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$`)                                                                                            // allow IPv4 addresses
+	regxIpv4Port = regexp.MustCompile(`^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]):([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$`) // allow IPv4 addresses with ports from 1 to 65535
 
 	// init validator
 	Validator = validator.New()
@@ -32,6 +36,8 @@ func init() {
 	_ = Validator.RegisterValidation("alphadash", alphaDash)
 	_ = Validator.RegisterValidation("alphaSpace", alphaSpace)
 	_ = Validator.RegisterValidation("domain", domain)
+	_ = Validator.RegisterValidation("ipv4", ipv4)
+	_ = Validator.RegisterValidation("ipv4port", ipv4Port)
 }
 
 func specialchar(fl validator.FieldLevel) bool {
@@ -67,6 +73,20 @@ func domain(fl validator.FieldLevel) bool {
 		return true
 	}
 	return regxDomain.MatchString(fl.Field().String())
+}
+
+func ipv4(fl validator.FieldLevel) bool {
+	if fl.Field().String() == "" {
+		return true
+	}
+	return regxIpv4.MatchString(fl.Field().String())
+}
+
+func ipv4Port(fl validator.FieldLevel) bool {
+	if fl.Field().String() == "" {
+		return true
+	}
+	return regxIpv4Port.MatchString(fl.Field().String())
 }
 
 // Function to map validation errors to user-friendly messages

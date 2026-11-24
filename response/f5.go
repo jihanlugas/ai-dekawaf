@@ -111,18 +111,18 @@ type F5Login struct {
 		User             struct {
 			Link string `json:"link"`
 		} `json:"user"`
-		Timeout          int    `json:"timeout"`
-		StartTime        string `json:"startTime"`
-		Address          string `json:"address"`
-		Partition        string `json:"partition"`
-		Generation       int    `json:"generation"`
-		LastUpdateMicros int64  `json:"lastUpdateMicros"`
-		ExpirationMicros int64  `json:"expirationMicros"`
-		Kind             string `json:"kind"`
-		SelfLink         string `json:"selfLink"`
+		Timeout          int         `json:"timeout"`
+		StartTime        string      `json:"startTime"`
+		Address          string      `json:"address"`
+		Partition        string      `json:"partition"`
+		Generation       int         `json:"generation"`
+		LastUpdateMicros json.Number `json:"lastUpdateMicros"`
+		ExpirationMicros int64       `json:"expirationMicros"`
+		Kind             string      `json:"kind"`
+		SelfLink         string      `json:"selfLink"`
 	} `json:"token"`
-	Generation       int `json:"generation"`
-	LastUpdateMicros int `json:"lastUpdateMicros"`
+	Generation       int         `json:"generation"`
+	LastUpdateMicros json.Number `json:"lastUpdateMicros"`
 }
 
 type F5CreateNode struct {
@@ -303,7 +303,7 @@ type F5CreateSecurityPolicy struct {
 	ActionItemReference                         F5ASMReference `json:"actionItemReference"`
 	MicroserviceReference                       F5ASMReference `json:"microserviceReference"`
 	XMLValidationFileReference                  F5ASMReference `json:"xmlValidationFileReference"`
-	LastUpdateMicros                            int64          `json:"lastUpdateMicros"`
+	LastUpdateMicros                            json.Number    `json:"lastUpdateMicros"`
 	JSONProfileReference                        F5ASMReference `json:"jsonProfileReference"`
 	BruteForceAttackPreventionReference         F5ASMReference `json:"bruteForceAttackPreventionReference"`
 	DisabledActionItemReference                 F5ASMReference `json:"disabledActionItemReference"`
@@ -344,7 +344,7 @@ type F5ServerTechnology struct {
 	ServerTechnologyDisplayName string                        `json:"serverTechnologyDisplayName"`
 	ServerTechnologyName        string                        `json:"serverTechnologyName"`
 	LogoFileName                string                        `json:"logoFileName"`
-	LastUpdateMicros            int64                         `json:"lastUpdateMicros"`
+	LastUpdateMicros            json.Number                   `json:"lastUpdateMicros"`
 	Description                 string                        `json:"description"`
 	Kind                        string                        `json:"kind"`
 	SelfLink                    string                        `json:"selfLink"`
@@ -365,7 +365,7 @@ type F5ServerTechnologyInPolicy struct {
 	Kind                      string                      `json:"kind"`
 	SelfLink                  string                      `json:"selfLink"`
 	ID                        string                      `json:"id"`
-	LastUpdateMicros          int64                       `json:"lastUpdateMicros"`
+	LastUpdateMicros          json.Number                 `json:"lastUpdateMicros"`
 	ServerTechnologyReference F5ServerTechnologyReference `json:"serverTechnologyReference"`
 }
 
@@ -633,7 +633,7 @@ type F5AssignSecurityPolicyToVS struct {
 		Link            string `json:"link"`
 		IsSubCollection bool   `json:"isSubCollection"`
 	} `json:"xmlValidationFileReference"`
-	LastUpdateMicros     int64 `json:"lastUpdateMicros"`
+	LastUpdateMicros     json.Number `json:"lastUpdateMicros"`
 	JSONProfileReference struct {
 		Link            string `json:"link"`
 		IsSubCollection bool   `json:"isSubCollection"`
@@ -680,10 +680,10 @@ type F5AssignSecurityPolicyToVS struct {
 }
 
 type F5AssignServerTecnologyToSecurityPolicy struct {
-	Kind                      string `json:"kind"`
-	SelfLink                  string `json:"selfLink"`
-	ID                        string `json:"id"`
-	LastUpdateMicros          int64  `json:"lastUpdateMicros"`
+	Kind                      string      `json:"kind"`
+	SelfLink                  string      `json:"selfLink"`
+	ID                        string      `json:"id"`
+	LastUpdateMicros          json.Number `json:"lastUpdateMicros"`
 	ServerTechnologyReference struct {
 		Link                 string `json:"link"`
 		ServerTechnologyName string `json:"serverTechnologyName"`
@@ -1033,7 +1033,7 @@ type F5GetSecurityPolicy struct {
 		Link            string `json:"link"`
 		IsSubCollection bool   `json:"isSubCollection"`
 	} `json:"xmlValidationFileReference"`
-	LastUpdateMicros     int64 `json:"lastUpdateMicros"`
+	LastUpdateMicros     json.Number `json:"lastUpdateMicros"`
 	JSONProfileReference struct {
 		Link            string `json:"link"`
 		IsSubCollection bool   `json:"isSubCollection"`
@@ -1361,11 +1361,11 @@ type F5Upload struct {
 	UsedChunks         struct {
 		Num0 int `json:"0"`
 	} `json:"usedChunks"`
-	TotalByteCount    int    `json:"totalByteCount"`
-	LocalFilePath     string `json:"localFilePath"`
-	TemporaryFilePath string `json:"temporaryFilePath"`
-	Generation        int    `json:"generation"`
-	LastUpdateMicros  int64  `json:"lastUpdateMicros"`
+	TotalByteCount    int         `json:"totalByteCount"`
+	LocalFilePath     string      `json:"localFilePath"`
+	TemporaryFilePath string      `json:"temporaryFilePath"`
+	Generation        int         `json:"generation"`
+	LastUpdateMicros  json.Number `json:"lastUpdateMicros"`
 }
 
 type F5Install struct {
@@ -1792,4 +1792,36 @@ type F5SNI struct {
 		} `json:"keyReference"`
 		Usage string `json:"usage"`
 	} `json:"certKeyChain"`
+}
+
+type F5ListVirtualAddress struct {
+	Kind     string             `json:"kind"`
+	SelfLink string             `json:"selfLink"`
+	Items    []F5VirtualAddress `json:"items"`
+}
+
+type F5VirtualAddress struct {
+	Kind                  string `json:"kind"`
+	Name                  string `json:"name"`
+	Partition             string `json:"partition"`
+	FullPath              string `json:"fullPath"`
+	Generation            int    `json:"generation"`
+	SelfLink              string `json:"selfLink"`
+	Address               string `json:"address"`
+	Arp                   string `json:"arp"`
+	AutoDelete            string `json:"autoDelete"`
+	ConnectionLimit       int    `json:"connectionLimit"`
+	Enabled               string `json:"enabled"`
+	Floating              string `json:"floating"`
+	IcmpEcho              string `json:"icmpEcho"`
+	InheritedTrafficGroup string `json:"inheritedTrafficGroup"`
+	Mask                  string `json:"mask"`
+	RouteAdvertisement    string `json:"routeAdvertisement"`
+	ServerScope           string `json:"serverScope"`
+	Spanning              string `json:"spanning"`
+	TrafficGroup          string `json:"trafficGroup"`
+	TrafficGroupReference struct {
+		Link string `json:"link"`
+	} `json:"trafficGroupReference"`
+	Unit int `json:"unit"`
 }

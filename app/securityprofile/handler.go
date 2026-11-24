@@ -52,6 +52,7 @@ func (h *Handler) Page(c *gin.Context) {
 // @Param node formData string true "Node"
 // @Param pool formData string true "Pool"
 // @Param port formData string true "Port"
+// @Param destination formData string true "Destination (IPv4)"
 // @Param serverTechnologies formData []string false "Server technologies" collectionFormat(multi)
 // @Param enforcementMode formData string true "Enforcement mode"
 // @Param botProtection formData bool false "Bot protection"

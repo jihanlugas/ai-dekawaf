@@ -310,7 +310,7 @@ func TestPoolMemberAndSecurityPolicy(t *testing.T) {
 	policy, err := repo.CreateSecurityPolicy(ctx, request.F5CreateSecurityPolicy{
 		Name: "policy", ApplicationLanguage: "auto-detect", EnforcementMode: "blocking", Active: true, PolicyBuilderEnabled: true,
 	})
-	if err != nil || policy.ID != "policy-id" || !policy.Active || policy.LastUpdateMicros != 1794899852000000 ||
+	if err != nil || policy.ID != "policy-id" || !policy.Active || policy.LastUpdateMicros.String() != "1794899852000000" ||
 		!policy.SignatureRequirementReference.IsSubCollection || policy.SignatureRequirementReference.Link != "signatures" || policy.TemplateReference.Title != "Fundamental" {
 		t.Fatalf("create policy: %+v, %v", policy, err)
 	}
@@ -387,7 +387,7 @@ func TestSecurityPolicyAndServerTechnologyLists(t *testing.T) {
 		t.Fatalf("technology list: %+v, %v", technologies, err)
 	}
 	technology := technologies.Items[0]
-	if technology.ServerTechnologyDisplayName != "Flask" || technology.ID != "flask-id" || technology.LastUpdateMicros != 1784098296000000 ||
+	if technology.ServerTechnologyDisplayName != "Flask" || technology.ID != "flask-id" || technology.LastUpdateMicros.String() != "1784098296000000" ||
 		!technology.IsLearnable || len(technology.ServerTechnologyReferences) != 1 || technology.ServerTechnologyReferences[0].ServerTechnologyName != "Python" {
 		t.Fatalf("unexpected technology: %+v", technology)
 	}
@@ -396,7 +396,7 @@ func TestSecurityPolicyAndServerTechnologyLists(t *testing.T) {
 		t.Fatalf("policy technology list: %+v, %v", policyTechnologies, err)
 	}
 	entry := policyTechnologies.Items[0]
-	if entry.ID != "entry-id" || entry.LastUpdateMicros != 1793096222000000 || entry.ServerTechnologyReference.Link != "flask-link" || entry.ServerTechnologyReference.ServerTechnologyName != "Flask" {
+	if entry.ID != "entry-id" || entry.LastUpdateMicros.String() != "1793096222000000" || entry.ServerTechnologyReference.Link != "flask-link" || entry.ServerTechnologyReference.ServerTechnologyName != "Flask" {
 		t.Fatalf("unexpected policy technology: %+v", entry)
 	}
 }

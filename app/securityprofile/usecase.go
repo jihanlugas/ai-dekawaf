@@ -4,6 +4,7 @@ import (
 	"ai-dekawaf/app/auditlog"
 	"ai-dekawaf/app/f5"
 	"ai-dekawaf/helper"
+	"ai-dekawaf/model"
 	"ai-dekawaf/request"
 	"ai-dekawaf/response"
 	"fmt"
@@ -31,13 +32,29 @@ func NewUsecase(repo Repository, auditlogRepo auditlog.Repository, f5Repo f5.Rep
 
 func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) (err error) {
 
-	go u.createSecurityProfile(c, req)
+	// go func() {
+	// 	err = u.createSecurityProfile(c, req)
+	// 	fmt.Printf("createSecurityProfile %v\n", err)
+	// }()
 
-	return
+	mSecurityProfile := model.SecurityProfile{
+		ID:              helper.GetUniqueID(),
+		Name:            req.Name,
+		Description:     req.Description,
+		Domain:          req.Domain,
+		Destination:     req.Destination,
+		EnforcementMode: req.EnforcementMode,
+		BotProtection:   req.BotProtection,
+	}
+	err = u.repo.Create(mSecurityProfile)
+	if err != nil {
+		return err
+	}
+
+	return u.createSecurityProfile(c, req)
 }
 
-func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) {
-	var err error
+func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) (err error) {
 	resNode, err := helper.LogF5Request("CreateNode", func() (response.F5CreateNode, error) {
 		return u.f5Repo.CreateNode(c, request.F5CreateNode{
 			Name:    req.Node,
@@ -45,7 +62,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	resPool, err := helper.LogF5Request("CreatePool", func() (response.F5CreatePool, error) {
@@ -61,7 +78,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	crtName := fmt.Sprintf("%s.crt", helper.Slugify(req.Name))
@@ -69,7 +86,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		return u.f5Repo.Upload(c, crtName, req.CertificateFile)
 	})
 	if err != nil {
-		return
+		return err
 	}
 	_, err = helper.LogF5Request("InstallCert", func() (response.F5Install, error) {
 		return u.f5Repo.InstallCertOrChain(c, request.F5Install{
@@ -79,7 +96,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	chainName := fmt.Sprintf("%s-chain.crt", helper.Slugify(req.Name))
@@ -88,7 +105,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			return u.f5Repo.Upload(c, chainName, req.ChainFile)
 		})
 		if err != nil {
-			return
+			return err
 		}
 		_, err = helper.LogF5Request("InstallChain", func() (response.F5Install, error) {
 			return u.f5Repo.InstallCertOrChain(c, request.F5Install{
@@ -98,7 +115,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			})
 		})
 		if err != nil {
-			return
+			return err
 		}
 	}
 
@@ -107,7 +124,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		return u.f5Repo.Upload(c, keyName, req.KeyFile)
 	})
 	if err != nil {
-		return
+		return err
 	}
 	_, err = helper.LogF5Request("InstallKey", func() (response.F5Install, error) {
 		return u.f5Repo.InstallKey(c, request.F5Install{
@@ -117,7 +134,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	var CertKeyChain []struct {
@@ -148,31 +165,42 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	_, err = helper.LogF5Request("ActiveSNI", func() (response.F5ActiveSNI, error) {
-		return u.f5Repo.ActiveSNI(c, helper.FormatF5Path(resCreateSslSecurityProfile.FullPath), request.F5ActiveSNI{
+		return u.f5Repo.ActiveSNI(c, resCreateSslSecurityProfile.FullPath, request.F5ActiveSNI{
 			ServerName: req.Domain,
 			SniDefault: "true",
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
+
+	// resListVirtualAddress, err := helper.LogF5Request("ListVirtualAddress", func() (response.F5ListVirtualAddress, error) {
+	// 	return u.f5Repo.ListVirtualAddress(c)
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if len(resListVirtualAddress.Items) == 0 {
+	// 	return fmt.Errorf("no virtual addresses found")
+	// }
 
 	resCreateVS, err := helper.LogF5Request("CreateVS", func() (response.F5VS, error) {
 		return u.f5Repo.CreateVS(c, request.F5CreateVS{
 			Name:        fmt.Sprintf("%s-vs", helper.Slugify(req.Name)),
 			Partition:   "Common",
-			Destination: "103.125.100.112:443", // sumber tidak diketahui, perlu ditanyakan lagi
+			Destination: fmt.Sprintf("%s:%s", req.Destination, req.Port),
 			Mask:        "255.255.255.255",
 			IPProtocol:  "tcp",
 			Pool:        resPool.FullPath,
 			Profiles: []request.F5VSProfile{
 				{
-					Name:    fmt.Sprintf("%s-client-ssl", helper.Slugify(req.Name)),
-					Context: "tcp",
+					Name:    "tcp",
+					Context: "all",
 				},
 				{
 					Name:    resCreateSslSecurityProfile.FullPath,
@@ -182,7 +210,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	reqF5 := request.F5CreateSecurityPolicy{}
@@ -208,14 +236,14 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			PolicyBuilderEnabled: true,
 		}
 	default:
-		return
+		return fmt.Errorf("unsupported enforcement mode: %s", req.EnforcementMode)
 	}
 
 	resCreateSecurityPolicy, err := helper.LogF5Request("CreateSecurityPolicy", func() (response.F5CreateSecurityPolicy, error) {
 		return u.f5Repo.CreateSecurityPolicy(c, reqF5)
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	_, err = helper.LogF5Request("AssignSecurityPolicyToVS", func() (response.F5AssignSecurityPolicyToVS, error) {
@@ -226,7 +254,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	for _, serverTecnology := range req.ServerTecnologies {
@@ -238,7 +266,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			})
 		})
 		if err != nil {
-			return
+			return err
 		}
 	}
 
@@ -248,24 +276,33 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return
+		return err
 	}
 
-	reqAttachBotDefense := request.F5AttachBotDefenseandLogProfileToVS{
-		SecurityLogProfiles: []string{
-			"/Common/local-bot-defense",
-		},
-	}
 	if req.BotProtection {
-		reqAttachBotDefense.BotDefenseProfile.Link = "https://localhost/mgmt/tm/security/bot-defense/profile/~Common~bot-defense"
+		reqAttachBotDefense := request.F5AttachBotDefenseandLogProfileToVS{
+			SecurityLogProfiles: []string{
+				"/Common/local-bot-defense",
+			},
+		}
+
+		_, err = helper.LogF5Request("AttachBotDefenseandLogProfileToVS", func() (response.F5AttachBotDefenseandLogProfileToVS, error) {
+			return u.f5Repo.AttachBotDefenseandLogProfileToVS(c, resCreateVS.FullPath, reqAttachBotDefense)
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = helper.LogF5Request("AttachBotDefenseProfileToVS", func() (response.F5VSProfile, error) {
+			return u.f5Repo.AttachBotDefenseToVSProfile(c, resCreateVS.FullPath, request.F5VSProfile{
+				Name:    "/Common/bot-defense",
+				Context: "all",
+			})
+		})
+		if err != nil {
+			return err
+		}
 	}
 
-	_, err = helper.LogF5Request("AttachBotDefenseandLogProfileToVS", func() (response.F5AttachBotDefenseandLogProfileToVS, error) {
-		return u.f5Repo.AttachBotDefenseandLogProfileToVS(c, resCreateVS.FullPath, reqAttachBotDefense)
-	})
-	if err != nil {
-		return
-	}
-
-	return
+	return nil
 }

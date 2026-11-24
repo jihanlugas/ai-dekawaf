@@ -18,14 +18,14 @@ type Repository interface {
 }
 
 type repository struct {
-	connection *gorm.DB
+	db *gorm.DB
 }
 
-func NewRepository(connection *gorm.DB) Repository {
-	return &repository{connection}
+func NewRepository(db *gorm.DB) Repository {
+	return &repository{db}
 }
 
-func (a *repository) ErrorToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
+func (r *repository) ErrorToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
 	var req = request.Auditlog{
 		UserID:         userID,
 		OrganizationID: orgID,
@@ -41,10 +41,10 @@ func (a *repository) ErrorToLog(userID string, orgID string, projectID string, i
 		CreatedAt:      time.Now(),
 	}
 
-	return a.insertLogToAuditlog(req)
+	return r.insertLogToAuditlog(req)
 }
 
-func (a *repository) InfoToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
+func (r *repository) InfoToLog(userID string, orgID string, projectID string, ipAddr string, serviceID string, serviceName string, serviceType string, methodName string, action string, metadata string) error {
 	var req = request.Auditlog{
 		UserID:         userID,
 		OrganizationID: orgID,
@@ -60,10 +60,10 @@ func (a *repository) InfoToLog(userID string, orgID string, projectID string, ip
 		CreatedAt:      time.Now(),
 	}
 
-	return a.insertLogToAuditlog(req)
+	return r.insertLogToAuditlog(req)
 }
 
-func (a *repository) insertLogToAuditlog(req request.Auditlog) error {
+func (r *repository) insertLogToAuditlog(req request.Auditlog) error {
 	var audit = model.Auditlog{}
 	u, err := uuid.NewRandom()
 	if err != nil {
@@ -85,8 +85,8 @@ func (a *repository) insertLogToAuditlog(req request.Auditlog) error {
 	audit.Metadata = req.Metadata
 	audit.CreatedAt = req.CreatedAt
 
-	if err := a.connection.Create(&audit).Error; err != nil {
+	if err := r.db.Create(&audit).Error; err != nil {
 		log.Println(err)
 	}
-	return err
+	return nil
 }

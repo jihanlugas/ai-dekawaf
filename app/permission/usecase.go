@@ -48,7 +48,7 @@ func (u *usecase) CheckUserPermission(c *gin.Context, projectID, privilegeName s
 		}
 
 		// Get user by user ID.
-		user, err := u.userRepo.GetUserByID(userID)
+		user, err := u.userRepo.GetUserByID(userID, "Organization", "OrganizationRole")
 		if err != nil {
 			return false
 		}
@@ -86,7 +86,7 @@ func (u *usecase) CheckUserPrivilege(c *gin.Context, privilegeName string, requi
 	// Check privilege for user tenant.
 	if userRole != constant.RoleSuperadmin && userRole != constant.RoleGodMode {
 		// Get user by user ID.
-		user, err := u.userRepo.GetUserByID(userID)
+		user, err := u.userRepo.GetUserByID(userID, "Organization", "OrganizationRole")
 		if err != nil {
 			return false
 		}

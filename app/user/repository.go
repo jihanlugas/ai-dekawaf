@@ -9,24 +9,26 @@ import (
 )
 
 type Repository interface {
-	GetUserByID(string) (model.User, error)
+	GetUserByID(id string, preload ...string) (model.User, error)
 	GetSuperAdminPrivilegesByID(string) ([]model.SuperAdminRoles, error)
 	GetAllUser() ([]model.User, error)
 }
 
 type repository struct {
-	connection *gorm.DB
+	db *gorm.DB
 }
 
-func NewRepository(connection *gorm.DB) Repository {
-	return &repository{connection}
+func NewRepository(db *gorm.DB) Repository {
+	return &repository{db}
 }
 
-func (u *repository) GetUserByID(id string) (model.User, error) {
+func (r *repository) GetUserByID(id string, preload ...string) (model.User, error) {
 	var user model.User
-	err := u.connection.
-		Preload("Organization").
-		Preload("OrganizationRole").
+	conn := r.db
+	for _, p := range preload {
+		conn = conn.Preload(p)
+	}
+	err := conn.
 		First(&user, "id = ?", id).Error
 	if err != nil {
 		logger.Error("GetUserByID", err, logrus.Fields{"user_id": id})
@@ -35,9 +37,9 @@ func (u *repository) GetUserByID(id string) (model.User, error) {
 	return user, nil
 }
 
-func (u *repository) GetSuperAdminPrivilegesByID(id string) ([]model.SuperAdminRoles, error) {
+func (r *repository) GetSuperAdminPrivilegesByID(id string) ([]model.SuperAdminRoles, error) {
 	var superAdminRoles []model.SuperAdminRoles
-	err := u.connection.
+	err := r.db.
 		Joins("JOIN super_admin_role_mapping srm ON srm.id_role = super_admin_roles.id").
 		Where("srm.id_admin = ?", id).
 		Find(&superAdminRoles).Error
@@ -48,12 +50,12 @@ func (u *repository) GetSuperAdminPrivilegesByID(id string) ([]model.SuperAdminR
 	return superAdminRoles, nil
 }
 
-func (u *repository) GetAllUser() ([]model.User, error) {
+func (r *repository) GetAllUser() ([]model.User, error) {
 	var (
 		users []model.User
 	)
-	if err := u.connection.Find(&users).Error; err != nil {
-		return users, nil
+	if err := r.db.Find(&users).Error; err != nil {
+		return users, err
 	}
 
 	return users, nil
