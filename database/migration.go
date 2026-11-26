@@ -1,25 +1,30 @@
 package database
 
+import (
+	"ai-dekawaf/model"
+	"fmt"
+)
+
 func RunMigration() {
-	// var err error
+	var err error
 
-	// db := PostsqlConn()
+	db := PostsqlConn()
 
-	// err = db.AutoMigrate(&model.ProviderType{}).Error
-	// if err != nil {
-	// 	fmt.Printf("failed to migrate table provider_types: %v\n", err)
-	// }
+	err = db.AutoMigrate(&model.SecurityProfile{})
+	if err != nil {
+		fmt.Printf("failed to migrate table security_profiles: %v\n", err)
+	}
 
 }
 
 func RunRollback() {
-	// var err error
+	var err error
 
-	// db := PostsqlConn()
+	db := PostsqlConn()
 
-	// err = db.DropTableIfExists(&model.ProviderType{}).Error
-	// if err != nil {
-	// 	fmt.Printf("failed to drop table provider_types: %v\n", err)
-	// }
+	err = db.Migrator().DropTable(&model.SecurityProfile{})
+	if err != nil {
+		fmt.Printf("failed to drop table security_profiles: %v\n", err)
+	}
 
 }

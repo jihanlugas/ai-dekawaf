@@ -30,6 +30,7 @@ type bodyLogWriter struct {
 func AuthorizeJWT() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
+		fmt.Println("Authorization Header:", authHeader)
 		if authHeader == "" {
 			err := errors.New("Token not found.")
 			logger.Error(noAuthorizationHeaderFound, err)

@@ -17,6 +17,11 @@ const docTemplate = `{
     "paths": {
         "/security-profile": {
             "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Get security profiles",
                 "consumes": [
                     "application/json"
@@ -28,6 +33,52 @@ const docTemplate = `{
                     "Security Profile"
                 ],
                 "summary": "Get security profiles",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "description",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "example": 10,
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "example": 1,
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "projectId",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "example": "",
+                        "name": "sortField",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "example": "",
+                        "name": "sortOrder",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -50,6 +101,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Create security profile",
                 "consumes": [
                     "multipart/form-data"
@@ -62,6 +118,13 @@ const docTemplate = `{
                 ],
                 "summary": "Create security profile",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID",
+                        "name": "projectId",
+                        "in": "formData",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "Name",
@@ -100,6 +163,13 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Port",
                         "name": "port",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination (IPv4)",
+                        "name": "destination",
                         "in": "formData",
                         "required": true
                     },
@@ -144,8 +214,7 @@ const docTemplate = `{
                         "type": "file",
                         "description": "Certificate chain file",
                         "name": "chainFile",
-                        "in": "formData",
-                        "required": true
+                        "in": "formData"
                     }
                 ],
                 "responses": {

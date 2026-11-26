@@ -261,9 +261,9 @@ func TestPoolMemberAndSecurityPolicy(t *testing.T) {
 			t.Errorf("missing F5 request headers")
 		}
 		switch {
-		case r.Method == http.MethodGet && r.URL.EscapedPath() == "/mgmt/tm/ltm/pool/~Common~pool%2Fname/members/~Common~node:443":
+		case r.Method == http.MethodGet && r.URL.EscapedPath() == "/mgmt/tm/ltm/pool/~Common~pool~name/members/~Common~node:443":
 			_, _ = w.Write([]byte(memberJSON))
-		case r.Method == http.MethodGet && r.URL.EscapedPath() == "/mgmt/tm/ltm/pool/~Common~pool%2Fname/members":
+		case r.Method == http.MethodGet && r.URL.EscapedPath() == "/mgmt/tm/ltm/pool/~Common~pool~name/members":
 			_, _ = w.Write([]byte(`{"kind":"members","selfLink":"list-link","items":[` + memberJSON + `]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/mgmt/tm/asm/policies":
 			var body map[string]any
@@ -478,13 +478,13 @@ func TestPolicyAndDefenseOperations(t *testing.T) {
 			func() error { _, err := repo.GetSecurityPolicy(ctx, "policy/id"); return err }},
 		{"list bot defense", http.MethodGet, "/mgmt/tm/security/bot-defense/profile", "", "get bot defense",
 			func() error { _, err := repo.ListBotDefense(ctx); return err }},
-		{"get bot defense", http.MethodGet, "/mgmt/tm/security/bot-defense/profile/~Common~bot%2Fname", "", "get bot defense",
+		{"get bot defense", http.MethodGet, "/mgmt/tm/security/bot-defense/profile/~Common~bot~name", "", "get bot defense",
 			func() error { _, err := repo.GetBotDefense(ctx, "~Common~bot/name"); return err }},
 		{"list log profile", http.MethodGet, "/mgmt/tm/security/log/profile", "", "list log profile",
 			func() error { _, err := repo.ListLogProfile(ctx); return err }},
-		{"get log profile", http.MethodGet, "/mgmt/tm/security/log/profile/~Common~log%2Fname", "", "get log profile",
+		{"get log profile", http.MethodGet, "/mgmt/tm/security/log/profile/~Common~log~name", "", "get log profile",
 			func() error { _, err := repo.GetLogProfile(ctx, "~Common~log/name"); return err }},
-		{"attach profiles", http.MethodPatch, "/mgmt/tm/ltm/virtual/~Common~vs%2Fname", `{"securityLogProfiles":["/Common/log"],"botDefenseProfile":{"link":"bot-link"}}`, "attach bot defense and log profile to vs",
+		{"attach profiles", http.MethodPatch, "/mgmt/tm/ltm/virtual/~Common~vs~name", `{"securityLogProfiles":["/Common/log"],"botDefenseProfile":{"link":"bot-link"}}`, "attach bot defense and log profile to vs",
 			func() error {
 				_, err := repo.AttachBotDefenseandLogProfileToVS(ctx, "~Common~vs/name", request.F5AttachBotDefenseandLogProfileToVS{SecurityLogProfiles: []string{"/Common/log"}, BotDefenseProfile: request.F5Link{Link: "bot-link"}})
 				return err

@@ -7,6 +7,7 @@ import (
 	"ai-dekawaf/app/project"
 	"ai-dekawaf/app/securityprofile"
 	"ai-dekawaf/app/user"
+	"ai-dekawaf/app/websocket"
 	"ai-dekawaf/database"
 	"ai-dekawaf/middleware"
 	"context"
@@ -33,11 +34,11 @@ var (
 	userRepo            user.Repository            = user.NewRepository(db)
 
 	// usecases
-	securityprofileUsecase securityprofile.Usecase = securityprofile.NewUsecase(securityprofileRepo, auditlogRepo, f5Repo)
 	permissionUsecase      permission.Usecase      = permission.NewUsecase(projectRepo, userRepo)
+	securityprofileUsecase securityprofile.Usecase = securityprofile.NewUsecase(securityprofileRepo, auditlogRepo, f5Repo, projectRepo, permissionUsecase)
 
 	// handler
-	securityprofileHandler securityprofile.Handler = securityprofile.NewHandler(securityprofileUsecase, permissionUsecase, projectRepo)
+	securityprofileHandler securityprofile.Handler = securityprofile.NewHandler(securityprofileUsecase)
 )
 
 func SetupRouter() (*gin.Engine, error) {
@@ -45,7 +46,7 @@ func SetupRouter() (*gin.Engine, error) {
 		return nil, fmt.Errorf("initialize F5 authentication: %w", err)
 	}
 
-	// websocket.InitHandler()
+	websocket.InitHandler()
 
 	r := gin.Default()
 	if os.Getenv("ENV") != "local" {
@@ -59,13 +60,15 @@ func SetupRouter() (*gin.Engine, error) {
 
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
 
-	r.GET("/health-check", middleware.AuthorizeJWT(), func(ctx *gin.Context) {
+	r.GET("/health-check", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "Ok")
 	})
 
 	rSecurityProfile := r.Group("/security-profile")
-	rSecurityProfile.GET("", securityprofileHandler.Page)
-	rSecurityProfile.POST("", securityprofileHandler.Create)
+	rSecurityProfile.GET("", middleware.AuthorizeJWT(), securityprofileHandler.Page)
+	rSecurityProfile.GET("/:id", middleware.AuthorizeJWT(), securityprofileHandler.Get)
+	rSecurityProfile.POST("", middleware.AuthorizeJWT(), securityprofileHandler.Create)
+	rSecurityProfile.POST("/:id/delete", middleware.AuthorizeJWT(), securityprofileHandler.Delete)
 
 	return r, nil
 }

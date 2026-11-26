@@ -17,8 +17,6 @@ var psqlConn *gorm.DB
 
 // initialize database
 func init() {
-	// Environment variables are loaded from Kubernetes config
-
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")

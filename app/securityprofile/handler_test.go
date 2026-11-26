@@ -15,6 +15,7 @@ import (
 )
 
 type captureUsecase struct {
+	Usecase
 	called bool
 	req    request.CreateSecurityProfile
 }
@@ -29,8 +30,8 @@ func TestCreateMultipart(t *testing.T) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	fields := map[string][]string{
-		"name": {"profile"}, "description": {"description"}, "domain": {"example.com"},
-		"node": {"node"}, "pool": {"pool"}, "port": {"443"},
+		"projectId": {"project"}, "name": {"profile"}, "description": {"description"}, "domain": {"example.com"},
+		"node": {"node"}, "pool": {"pool"}, "port": {"443"}, "destination": {"192.0.2.1"},
 		"serverTechnologies": {"Flask", "Python"}, "enforcementMode": {"blocking"},
 		"botProtection": {"true"},
 	}
@@ -66,8 +67,8 @@ func TestCreateMultipart(t *testing.T) {
 		t.Fatalf("status = %d, usecase called = %v, response = %s", recorder.Code, u.called, recorder.Body.String())
 	}
 	got := u.req
-	if got.Name != "profile" || got.Description != "description" || got.Domain != "example.com" ||
-		got.Node != "node" || got.Pool != "pool" || got.Port != "443" ||
+	if got.ProjectID != "project" || got.Name != "profile" || got.Description != "description" || got.Domain != "example.com" ||
+		got.Node != "node" || got.Pool != "pool" || got.Port != "443" || got.Destination != "192.0.2.1" ||
 		!reflect.DeepEqual(got.ServerTecnologies, []string{"Flask", "Python"}) ||
 		got.EnforcementMode != "blocking" || !got.BotProtection {
 		t.Fatalf("unexpected request: %+v", got)
@@ -98,7 +99,7 @@ func TestCreateBinding(t *testing.T) {
 		status      int
 		called      bool
 	}{
-		{"json remains supported", "application/json", `{"name":"profile"}`, http.StatusOK, true},
+		{"json remains supported", "application/json", `{"projectId":"project","name":"profile","domain":"example.com","node":"node","pool":"pool","port":"443","destination":"192.0.2.1","enforcementMode":"blocking","certificateFile":{"Filename":"cert.pem"},"keyFile":{"Filename":"key.pem"}}`, http.StatusOK, true},
 		{"invalid form value", "application/x-www-form-urlencoded", "botProtection=invalid", http.StatusBadRequest, false},
 	}
 	for _, tt := range tests {

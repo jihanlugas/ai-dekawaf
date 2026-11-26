@@ -3,7 +3,12 @@ package securityprofile
 import (
 	"ai-dekawaf/app/auditlog"
 	"ai-dekawaf/app/f5"
+	"ai-dekawaf/app/permission"
+	"ai-dekawaf/app/project"
+	"ai-dekawaf/app/websocket"
+	"ai-dekawaf/constant"
 	"ai-dekawaf/helper"
+	"ai-dekawaf/middleware"
 	"ai-dekawaf/model"
 	"ai-dekawaf/request"
 	"ai-dekawaf/response"
@@ -13,48 +18,162 @@ import (
 )
 
 type Usecase interface {
+	PageSecurityProfile(c *gin.Context, req request.PageSecurityProfile) (mSecurityProfiles []model.SecurityProfile, count int64, err error)
 	CreateSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) (err error)
+	GetSecurityProfile(c *gin.Context, id string) (mSecurityProfile model.SecurityProfile, err error)
+	DeleteSecurityProfile(c *gin.Context, id string) (err error)
 }
 
 type usecase struct {
-	repo         Repository
-	auditlogRepo auditlog.Repository
-	f5Repo       f5.Repository
+	repo              Repository
+	auditlogRepo      auditlog.Repository
+	f5Repo            f5.Repository
+	projectRepo       project.Repository
+	permissionUsecase permission.Usecase
 }
 
-func NewUsecase(repo Repository, auditlogRepo auditlog.Repository, f5Repo f5.Repository) Usecase {
+func NewUsecase(repo Repository, auditlogRepo auditlog.Repository, f5Repo f5.Repository, projectRepo project.Repository, permissionUsecase permission.Usecase) Usecase {
 	return &usecase{
-		repo:         repo,
-		auditlogRepo: auditlogRepo,
-		f5Repo:       f5Repo,
+		repo:              repo,
+		auditlogRepo:      auditlogRepo,
+		f5Repo:            f5Repo,
+		projectRepo:       projectRepo,
+		permissionUsecase: permissionUsecase,
 	}
 }
 
-func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) (err error) {
+func (u *usecase) PageSecurityProfile(c *gin.Context, req request.PageSecurityProfile) (mSecurityProfiles []model.SecurityProfile, count int64, err error) {
+	// Authorize the user.
+	authorized := u.permissionUsecase.CheckUserPermission(c, req.ProjectID, constant.PrivilegeDekaWaf, false)
+	if !authorized {
+		return nil, 0, fmt.Errorf(constant.ErrForbidden)
+	}
 
-	// go func() {
-	// 	err = u.createSecurityProfile(c, req)
-	// 	fmt.Printf("createSecurityProfile %v\n", err)
-	// }()
+	// Check project availability status.
+	availability, err := u.projectRepo.ProjectAvailabilityStatus(req.ProjectID)
+	if err != nil {
+		return nil, 0, fmt.Errorf(constant.ErrCheckProjectAvailability)
+	}
+
+	if !availability {
+		return nil, 0, fmt.Errorf(constant.ErrProjectNotAvailable)
+	}
+
+	return u.repo.Page(req)
+}
+
+func (u *usecase) GetSecurityProfile(c *gin.Context, id string) (mSecurityProfile model.SecurityProfile, err error) {
+	mSecurityProfile, err = u.repo.GetByID(id)
+	if err != nil {
+		return mSecurityProfile, err
+	}
+
+	// Authorize the user.
+	authorized := u.permissionUsecase.CheckUserPermission(c, mSecurityProfile.ProjectID, constant.PrivilegeDekaWaf, true)
+	if !authorized {
+		return mSecurityProfile, fmt.Errorf(constant.ErrForbidden)
+	}
+
+	// Check project availability status.
+	availability, err := u.projectRepo.ProjectAvailabilityStatus(mSecurityProfile.ProjectID)
+	if err != nil {
+		return mSecurityProfile, fmt.Errorf(constant.ErrCheckProjectAvailability)
+	}
+
+	if !availability {
+		return mSecurityProfile, fmt.Errorf(constant.ErrProjectNotAvailable)
+	}
+
+	return mSecurityProfile, nil
+}
+
+func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) (err error) {
+	userID := middleware.GetUserID(c)
+
+	// Authorize the user.
+	authorized := u.permissionUsecase.CheckUserPermission(c, req.ProjectID, constant.PrivilegeDekaWaf, true)
+	if !authorized {
+		return fmt.Errorf(constant.ErrForbidden)
+	}
+
+	// Check project availability status.
+	availability, err := u.projectRepo.ProjectAvailabilityStatus(req.ProjectID)
+	if err != nil {
+		return fmt.Errorf(constant.ErrCheckProjectAvailability)
+	}
+
+	if !availability {
+		return fmt.Errorf(constant.ErrProjectNotAvailable)
+	}
+
+	mProject, err := u.projectRepo.GetByID(req.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	mLog := model.Auditlog{
+		ID:             helper.GetUniqueID(),
+		UserID:         userID,
+		OrganizationID: mProject.OrganizationID,
+		ProjectID:      mProject.ID,
+		IPAddress:      helper.GetIP(c),
+		ServiceType:    "Deka Waf",
+		ServiceName:    "Security Profile",
+		MethodName:     "Create Security Profile",
+	}
 
 	mSecurityProfile := model.SecurityProfile{
 		ID:              helper.GetUniqueID(),
+		OrganizationID:  mProject.OrganizationID,
+		ProjectID:       req.ProjectID,
 		Name:            req.Name,
 		Description:     req.Description,
 		Domain:          req.Domain,
 		Destination:     req.Destination,
 		EnforcementMode: req.EnforcementMode,
 		BotProtection:   req.BotProtection,
+		Status:          model.SecurityProfileStatusPending,
 	}
 	err = u.repo.Create(mSecurityProfile)
 	if err != nil {
+		go u.auditlogRepo.ErrorToLog(mLog, "Error Create Security Profile", err.Error())
 		return err
 	}
 
-	return u.createSecurityProfile(c, req)
+	go func() {
+		mSecurityProfile, err = u.createSecurityProfile(c, req, mSecurityProfile)
+		if err != nil {
+			mSecurityProfile.Status = model.SecurityProfileStatusInactive
+			websocket.SendWebsocketMessage(mProject.ID, map[string]string{
+				"security_profile_id":   mSecurityProfile.ID,
+				"security_profile_name": mSecurityProfile.Name,
+				"action":                "create_security_profile",
+				"status":                "failed",
+				"error":                 err.Error(),
+			})
+		} else {
+			mSecurityProfile.Status = model.SecurityProfileStatusActive
+			websocket.SendWebsocketMessage(mProject.ID, map[string]string{
+				"security_profile_id":   mSecurityProfile.ID,
+				"security_profile_name": mSecurityProfile.Name,
+				"action":                "create_security_profile",
+				"status":                "success",
+			})
+		}
+
+		err = u.repo.Save(mSecurityProfile)
+		if err != nil {
+			fmt.Printf("saveSecurityProfile %v\n", err)
+		}
+	}()
+
+	go u.auditlogRepo.InfoToLog(mLog, "Create Security Profile", fmt.Sprintf("Security Profile %s is being processed", mSecurityProfile.Name))
+
+	return nil
 }
 
-func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecurityProfile) (err error) {
+func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecurityProfile, mSecurityProfile model.SecurityProfile) (mNewSecurityProfile model.SecurityProfile, err error) {
+	mNewSecurityProfile = mSecurityProfile
 	resNode, err := helper.LogF5Request("CreateNode", func() (response.F5CreateNode, error) {
 		return u.f5Repo.CreateNode(c, request.F5CreateNode{
 			Name:    req.Node,
@@ -62,8 +181,9 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.Node = resNode.Name
 
 	resPool, err := helper.LogF5Request("CreatePool", func() (response.F5CreatePool, error) {
 		return u.f5Repo.CreatePool(c, request.F5CreatePool{
@@ -78,16 +198,19 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.Pool = resPool.Name
 
 	crtName := fmt.Sprintf("%s.crt", helper.Slugify(req.Name))
 	resUploadCert, err := helper.LogF5Request("UploadCert", func() (response.F5Upload, error) {
 		return u.f5Repo.Upload(c, crtName, req.CertificateFile)
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.CertificatePath = resUploadCert.LocalFilePath
+
 	_, err = helper.LogF5Request("InstallCert", func() (response.F5Install, error) {
 		return u.f5Repo.InstallCertOrChain(c, request.F5Install{
 			Command:       "install",
@@ -96,7 +219,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
 
 	chainName := fmt.Sprintf("%s-chain.crt", helper.Slugify(req.Name))
@@ -105,8 +228,9 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			return u.f5Repo.Upload(c, chainName, req.ChainFile)
 		})
 		if err != nil {
-			return err
+			return mNewSecurityProfile, err
 		}
+		mNewSecurityProfile.ChainPath = resUploadChain.LocalFilePath
 		_, err = helper.LogF5Request("InstallChain", func() (response.F5Install, error) {
 			return u.f5Repo.InstallCertOrChain(c, request.F5Install{
 				Command:       "install",
@@ -115,7 +239,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			})
 		})
 		if err != nil {
-			return err
+			return mNewSecurityProfile, err
 		}
 	}
 
@@ -124,8 +248,9 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		return u.f5Repo.Upload(c, keyName, req.KeyFile)
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.KeyPath = resUploadKey.LocalFilePath
 	_, err = helper.LogF5Request("InstallKey", func() (response.F5Install, error) {
 		return u.f5Repo.InstallKey(c, request.F5Install{
 			Command:       "install",
@@ -134,7 +259,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
 
 	var CertKeyChain []struct {
@@ -165,8 +290,9 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.ClientSSL = resCreateSslSecurityProfile.Name
 
 	_, err = helper.LogF5Request("ActiveSNI", func() (response.F5ActiveSNI, error) {
 		return u.f5Repo.ActiveSNI(c, resCreateSslSecurityProfile.FullPath, request.F5ActiveSNI{
@@ -175,19 +301,8 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
-
-	// resListVirtualAddress, err := helper.LogF5Request("ListVirtualAddress", func() (response.F5ListVirtualAddress, error) {
-	// 	return u.f5Repo.ListVirtualAddress(c)
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
-	// if len(resListVirtualAddress.Items) == 0 {
-	// 	return fmt.Errorf("no virtual addresses found")
-	// }
 
 	resCreateVS, err := helper.LogF5Request("CreateVS", func() (response.F5VS, error) {
 		return u.f5Repo.CreateVS(c, request.F5CreateVS{
@@ -210,8 +325,9 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.VirtualServer = resCreateVS.Name
 
 	reqF5 := request.F5CreateSecurityPolicy{}
 	switch req.EnforcementMode {
@@ -236,15 +352,16 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			PolicyBuilderEnabled: true,
 		}
 	default:
-		return fmt.Errorf("unsupported enforcement mode: %s", req.EnforcementMode)
+		return mNewSecurityProfile, fmt.Errorf("unsupported enforcement mode: %s", req.EnforcementMode)
 	}
 
 	resCreateSecurityPolicy, err := helper.LogF5Request("CreateSecurityPolicy", func() (response.F5CreateSecurityPolicy, error) {
 		return u.f5Repo.CreateSecurityPolicy(c, reqF5)
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.Policy = resCreateSecurityPolicy.Name
 
 	_, err = helper.LogF5Request("AssignSecurityPolicyToVS", func() (response.F5AssignSecurityPolicyToVS, error) {
 		return u.f5Repo.AssignSecurityPolicyToVS(c, resCreateSecurityPolicy.ID, request.F5AssignSecurityPolicyToVS{
@@ -254,7 +371,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
 
 	for _, serverTecnology := range req.ServerTecnologies {
@@ -266,7 +383,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			})
 		})
 		if err != nil {
-			return err
+			return mNewSecurityProfile, err
 		}
 	}
 
@@ -276,7 +393,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 		})
 	})
 	if err != nil {
-		return err
+		return mNewSecurityProfile, err
 	}
 
 	if req.BotProtection {
@@ -290,7 +407,7 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			return u.f5Repo.AttachBotDefenseandLogProfileToVS(c, resCreateVS.FullPath, reqAttachBotDefense)
 		})
 		if err != nil {
-			return err
+			return mNewSecurityProfile, err
 		}
 
 		_, err = helper.LogF5Request("AttachBotDefenseProfileToVS", func() (response.F5VSProfile, error) {
@@ -300,9 +417,60 @@ func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecuri
 			})
 		})
 		if err != nil {
-			return err
+			return mNewSecurityProfile, err
 		}
 	}
+
+	return mNewSecurityProfile, nil
+}
+
+func (u *usecase) DeleteSecurityProfile(c *gin.Context, id string) (err error) {
+	userID := middleware.GetUserID(c)
+
+	mSecurityProfile, err := u.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+
+	// Authorize the user.
+	authorized := u.permissionUsecase.CheckUserPermission(c, mSecurityProfile.ProjectID, constant.PrivilegeDekaWaf, true)
+	if !authorized {
+		return fmt.Errorf(constant.ErrForbidden)
+	}
+
+	// Check project availability status.
+	availability, err := u.projectRepo.ProjectAvailabilityStatus(mSecurityProfile.ProjectID)
+	if err != nil {
+		return fmt.Errorf(constant.ErrCheckProjectAvailability)
+	}
+
+	if !availability {
+		return fmt.Errorf(constant.ErrProjectNotAvailable)
+	}
+
+	mProject, err := u.projectRepo.GetByID(mSecurityProfile.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	mLog := model.Auditlog{
+		ID:             helper.GetUniqueID(),
+		UserID:         userID,
+		OrganizationID: mProject.OrganizationID,
+		ProjectID:      mProject.ID,
+		IPAddress:      helper.GetIP(c),
+		ServiceType:    "Deka Waf",
+		ServiceName:    "Security Profile",
+		MethodName:     "Delete Security Profile",
+	}
+
+	err = u.repo.DeleteByID(id)
+	if err != nil {
+		go u.auditlogRepo.ErrorToLog(mLog, "Delete Security Profile", fmt.Sprintf("Failed to delete Security Profile %s", mSecurityProfile.Name))
+		return err
+	}
+
+	go u.auditlogRepo.InfoToLog(mLog, "Delete Security Profile", fmt.Sprintf("Security Profile %s deleted", mSecurityProfile.Name))
 
 	return nil
 }
