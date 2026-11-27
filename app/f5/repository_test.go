@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -538,5 +539,34 @@ func TestPolicyAndDefenseOperations(t *testing.T) {
 				t.Fatalf("error response: %v", err)
 			}
 		})
+	}
+}
+
+func TestDeleteCertKeyEndpointsAndNotFound(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		if strings.HasSuffix(r.URL.Path, "missing.crt") {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"not found"}`))
+		}
+	}))
+	defer server.Close()
+	t.Setenv("F5_URL", server.URL)
+	repo := NewRepository()
+	ctx := context.Background()
+
+	if err := repo.DeleteCertOrChain(ctx, "/Common/a.crt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DeleteKey(ctx, "/Common/a.key"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"DELETE /mgmt/tm/sys/crypto/cert/~Common~a.crt", "DELETE /mgmt/tm/sys/crypto/key/~Common~a.key"}
+	if strings.Join(paths, ",") != strings.Join(want, ",") {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+	if err := repo.DeleteCertOrChain(ctx, "/Common/missing.crt"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }

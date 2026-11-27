@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -65,6 +66,9 @@ type Repository interface {
 	DeleteCertOrChain(ctx context.Context, fullpath string) (err error)
 	DeleteKey(ctx context.Context, fullpath string) (err error)
 }
+
+// ErrNotFound is returned when F5 responds with 404 for the requested resource.
+var ErrNotFound = errors.New("F5 resource not found")
 
 type repository struct {
 	loginMu      sync.Mutex
@@ -690,6 +694,17 @@ func (r *repository) VerifySSLInVS(ctx context.Context, fullpath string) (data r
 	return data, nil
 }
 
+type notFoundError struct{ error }
+
+func (e notFoundError) Unwrap() error { return ErrNotFound }
+
+func wrapNotFound(status int, err error) error {
+	if status == http.StatusNotFound {
+		return notFoundError{err}
+	}
+	return err
+}
+
 func decodeF5Response(res *httpclient.Response, operation string, data interface{}) error {
 	if res.StatusCode >= 400 {
 		if res.StatusCode == http.StatusUnauthorized {
@@ -697,9 +712,9 @@ func decodeF5Response(res *httpclient.Response, operation string, data interface
 		}
 		var f5Error response.F5Error
 		if err := json.Unmarshal(res.Body, &f5Error); err != nil || f5Error.Message == "" {
-			return fmt.Errorf("%s failed with status code: %d", operation, res.StatusCode)
+			return wrapNotFound(res.StatusCode, fmt.Errorf("%s failed with status code: %d", operation, res.StatusCode))
 		}
-		return fmt.Errorf("%s failed: %s", operation, f5Error.Message)
+		return wrapNotFound(res.StatusCode, fmt.Errorf("%s failed: %s", operation, f5Error.Message))
 	}
 	if data == nil {
 		return nil
@@ -781,7 +796,7 @@ func (r *repository) DeleteSecurityPolicy(ctx context.Context, policyID string) 
 }
 
 func (r *repository) DeleteSslSecurityProfile(ctx context.Context, fullpath string) (err error) {
-	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/client-ssl/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/profile/client-ssl/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": currentToken(),
 	})
@@ -823,7 +838,7 @@ func (r *repository) DeleteNode(ctx context.Context, fullpath string) (err error
 }
 
 func (r *repository) DeleteCertOrChain(ctx context.Context, fullpath string) (err error) {
-	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/sys/certificate/ssl-cert/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/cert/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": currentToken(),
 	})
@@ -837,7 +852,7 @@ func (r *repository) DeleteCertOrChain(ctx context.Context, fullpath string) (er
 }
 
 func (r *repository) DeleteKey(ctx context.Context, fullpath string) (err error) {
-	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/sys/certificate/ssl-key/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/sys/crypto/key/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
 		"Content-Type":    "application/json",
 		"X-F5-Auth-Token": currentToken(),
 	})

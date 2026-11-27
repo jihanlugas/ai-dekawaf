@@ -12,6 +12,7 @@ import (
 	"ai-dekawaf/model"
 	"ai-dekawaf/request"
 	"ai-dekawaf/response"
+	"errors"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -112,7 +113,6 @@ func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecuri
 	}
 
 	mLog := model.Auditlog{
-		ID:             helper.GetUniqueID(),
 		UserID:         userID,
 		OrganizationID: mProject.OrganizationID,
 		ProjectID:      mProject.ID,
@@ -129,6 +129,8 @@ func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecuri
 		Name:            req.Name,
 		Description:     req.Description,
 		Domain:          req.Domain,
+		Node:            req.Node,
+		Pool:            req.Pool,
 		Destination:     req.Destination,
 		EnforcementMode: req.EnforcementMode,
 		BotProtection:   req.BotProtection,
@@ -151,6 +153,7 @@ func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecuri
 				"status":                "failed",
 				"error":                 err.Error(),
 			})
+			go u.auditlogRepo.ErrorToLog(mLog, "Error Create Security Profile", err.Error())
 		} else {
 			mSecurityProfile.Status = model.SecurityProfileStatusActive
 			websocket.SendWebsocketMessage(mProject.ID, map[string]string{
@@ -159,6 +162,7 @@ func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecuri
 				"action":                "create_security_profile",
 				"status":                "success",
 			})
+			go u.auditlogRepo.InfoToLog(mLog, "Create Security Profile", fmt.Sprintf("Security Profile %s created successfully", mSecurityProfile.Name))
 		}
 
 		err = u.repo.Save(mSecurityProfile)
@@ -183,7 +187,7 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
-	mNewSecurityProfile.Node = resNode.Name
+	mNewSecurityProfile.F5NodeFullPath = resNode.FullPath
 
 	resPool, err := helper.LogF5Request("CreatePool", func() (response.F5CreatePool, error) {
 		return u.f5Repo.CreatePool(c, request.F5CreatePool{
@@ -200,7 +204,7 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
-	mNewSecurityProfile.Pool = resPool.Name
+	mNewSecurityProfile.F5PoolFullPath = resPool.FullPath
 
 	crtName := fmt.Sprintf("%s.crt", helper.Slugify(req.Name))
 	resUploadCert, err := helper.LogF5Request("UploadCert", func() (response.F5Upload, error) {
@@ -209,7 +213,6 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
-	mNewSecurityProfile.CertificatePath = resUploadCert.LocalFilePath
 
 	_, err = helper.LogF5Request("InstallCert", func() (response.F5Install, error) {
 		return u.f5Repo.InstallCertOrChain(c, request.F5Install{
@@ -221,6 +224,7 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.F5CertificatePath = f5CommonPath(crtName)
 
 	chainName := fmt.Sprintf("%s-chain.crt", helper.Slugify(req.Name))
 	if req.ChainFile != nil {
@@ -230,7 +234,6 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 		if err != nil {
 			return mNewSecurityProfile, err
 		}
-		mNewSecurityProfile.ChainPath = resUploadChain.LocalFilePath
 		_, err = helper.LogF5Request("InstallChain", func() (response.F5Install, error) {
 			return u.f5Repo.InstallCertOrChain(c, request.F5Install{
 				Command:       "install",
@@ -241,6 +244,7 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 		if err != nil {
 			return mNewSecurityProfile, err
 		}
+		mNewSecurityProfile.F5ChainPath = f5CommonPath(chainName)
 	}
 
 	keyName := fmt.Sprintf("%s.key", helper.Slugify(req.Name))
@@ -250,7 +254,6 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
-	mNewSecurityProfile.KeyPath = resUploadKey.LocalFilePath
 	_, err = helper.LogF5Request("InstallKey", func() (response.F5Install, error) {
 		return u.f5Repo.InstallKey(c, request.F5Install{
 			Command:       "install",
@@ -261,6 +264,7 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
+	mNewSecurityProfile.F5KeyPath = f5CommonPath(keyName)
 
 	var CertKeyChain []struct {
 		Name  string `json:"name"`
@@ -292,7 +296,7 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
-	mNewSecurityProfile.ClientSSL = resCreateSslSecurityProfile.Name
+	mNewSecurityProfile.F5ClientSSLFullPath = resCreateSslSecurityProfile.FullPath
 
 	_, err = helper.LogF5Request("ActiveSNI", func() (response.F5ActiveSNI, error) {
 		return u.f5Repo.ActiveSNI(c, resCreateSslSecurityProfile.FullPath, request.F5ActiveSNI{
@@ -327,7 +331,7 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
-	mNewSecurityProfile.VirtualServer = resCreateVS.Name
+	mNewSecurityProfile.F5VirtualServerFullPath = resCreateVS.FullPath
 
 	reqF5 := request.F5CreateSecurityPolicy{}
 	switch req.EnforcementMode {
@@ -361,7 +365,8 @@ func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecu
 	if err != nil {
 		return mNewSecurityProfile, err
 	}
-	mNewSecurityProfile.Policy = resCreateSecurityPolicy.Name
+	mNewSecurityProfile.F5PolicyFullPath = resCreateSecurityPolicy.FullPath
+	mNewSecurityProfile.F5PolicyID = resCreateSecurityPolicy.ID
 
 	_, err = helper.LogF5Request("AssignSecurityPolicyToVS", func() (response.F5AssignSecurityPolicyToVS, error) {
 		return u.f5Repo.AssignSecurityPolicyToVS(c, resCreateSecurityPolicy.ID, request.F5AssignSecurityPolicyToVS{
@@ -454,7 +459,6 @@ func (u *usecase) DeleteSecurityProfile(c *gin.Context, id string) (err error) {
 	}
 
 	mLog := model.Auditlog{
-		ID:             helper.GetUniqueID(),
 		UserID:         userID,
 		OrganizationID: mProject.OrganizationID,
 		ProjectID:      mProject.ID,
@@ -472,9 +476,12 @@ func (u *usecase) DeleteSecurityProfile(c *gin.Context, id string) (err error) {
 	}
 
 	go func() {
-		err := u.deleteF5SecurityProfile(c, mSecurityProfile)
+		err := u.deleteF5SecurityProfile(c, &mSecurityProfile)
 		if err != nil {
 			mSecurityProfile.Status = model.SecurityProfileStatusInactive
+			if saveErr := u.repo.Save(mSecurityProfile); saveErr != nil {
+				fmt.Printf("saveSecurityProfile %v\n", saveErr)
+			}
 			websocket.SendWebsocketMessage(mProject.ID, map[string]string{
 				"security_profile_id":   mSecurityProfile.ID,
 				"security_profile_name": mSecurityProfile.Name,
@@ -487,6 +494,9 @@ func (u *usecase) DeleteSecurityProfile(c *gin.Context, id string) (err error) {
 			err = u.repo.DeleteByID(mSecurityProfile.ID)
 			if err != nil {
 				mSecurityProfile.Status = model.SecurityProfileStatusInactive
+				if saveErr := u.repo.Save(mSecurityProfile); saveErr != nil {
+					fmt.Printf("saveSecurityProfile %v\n", saveErr)
+				}
 				websocket.SendWebsocketMessage(mProject.ID, map[string]string{
 					"security_profile_id":   mSecurityProfile.ID,
 					"security_profile_name": mSecurityProfile.Name,
@@ -512,90 +522,57 @@ func (u *usecase) DeleteSecurityProfile(c *gin.Context, id string) (err error) {
 	return nil
 }
 
-func (u *usecase) deleteF5SecurityProfile(c *gin.Context, mSecurityProfile model.SecurityProfile) (err error) {
-	// Delete Virtual Server
-	if mSecurityProfile.VirtualServer != "" {
-		vsFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.VirtualServer)
-		_, err := helper.LogF5Request("DeleteVS", func() (interface{}, error) {
-			return nil, u.f5Repo.DeleteVS(c, vsFullPath)
-		})
-		if err != nil {
+func f5CommonPath(name string) string {
+	return fmt.Sprintf("/Common/%s", name)
+}
+
+// deleteF5Resource skips empty paths and treats an already-missing resource as deleted.
+func deleteF5Resource(name, path string, del func() error) error {
+	if path == "" {
+		return nil
+	}
+	_, err := helper.LogF5Request(name, func() (interface{}, error) {
+		return nil, del()
+	})
+	if err != nil && !errors.Is(err, f5.ErrNotFound) {
+		return err
+	}
+	return nil
+}
+
+// deleteF5SecurityProfile removes F5 resources in the reverse order of creation.
+// The Virtual Server goes first because it holds the policy assignment.
+// After each resource is deleted, its F5 path is cleared in the database so a
+// failed delete can be retried from where it stopped.
+func (u *usecase) deleteF5SecurityProfile(c *gin.Context, m *model.SecurityProfile) (err error) {
+	steps := []struct {
+		name  string
+		field *string
+		del   func() error
+	}{
+		{"DeleteVS", &m.F5VirtualServerFullPath, func() error { return u.f5Repo.DeleteVS(c, m.F5VirtualServerFullPath) }},
+		{"DeleteSecurityPolicy", &m.F5PolicyID, func() error { return u.f5Repo.DeleteSecurityPolicy(c, m.F5PolicyID) }},
+		{"DeleteSslSecurityProfile", &m.F5ClientSSLFullPath, func() error { return u.f5Repo.DeleteSslSecurityProfile(c, m.F5ClientSSLFullPath) }},
+		{"DeleteKey", &m.F5KeyPath, func() error { return u.f5Repo.DeleteKey(c, m.F5KeyPath) }},
+		{"DeleteChain", &m.F5ChainPath, func() error { return u.f5Repo.DeleteCertOrChain(c, m.F5ChainPath) }},
+		{"DeleteCert", &m.F5CertificatePath, func() error { return u.f5Repo.DeleteCertOrChain(c, m.F5CertificatePath) }},
+		{"DeletePool", &m.F5PoolFullPath, func() error { return u.f5Repo.DeletePool(c, m.F5PoolFullPath) }},
+		{"DeleteNode", &m.F5NodeFullPath, func() error { return u.f5Repo.DeleteNode(c, m.F5NodeFullPath) }},
+	}
+	for _, step := range steps {
+		if *step.field == "" {
+			continue
+		}
+		if err := deleteF5Resource(step.name, *step.field, step.del); err != nil {
+			return err
+		}
+		*step.field = ""
+		if step.name == "DeleteSecurityPolicy" {
+			m.F5PolicyFullPath = ""
+		}
+		if err := u.repo.Save(*m); err != nil {
 			return err
 		}
 	}
-
-	// Delete Security Policy
-	if mSecurityProfile.Policy != "" {
-		_, err := helper.LogF5Request("DeleteSecurityPolicy", func() (interface{}, error) {
-			return nil, u.f5Repo.DeleteSecurityPolicy(c, mSecurityProfile.Policy)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete SSL Security Profile
-	if mSecurityProfile.ClientSSL != "" {
-		sslFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.ClientSSL)
-		_, err := helper.LogF5Request("DeleteSslSecurityProfile", func() (interface{}, error) {
-			return nil, u.f5Repo.DeleteSslSecurityProfile(c, sslFullPath)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete Pool
-	if mSecurityProfile.Pool != "" {
-		poolFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.Pool)
-		_, err := helper.LogF5Request("DeletePool", func() (interface{}, error) {
-			return nil, u.f5Repo.DeletePool(c, poolFullPath)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete Node
-	if mSecurityProfile.Node != "" {
-		nodeFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.Node)
-		_, err := helper.LogF5Request("DeleteNode", func() (interface{}, error) {
-			return nil, u.f5Repo.DeleteNode(c, nodeFullPath)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete Certificate
-	if mSecurityProfile.CertificatePath != "" {
-		_, err := helper.LogF5Request("DeleteCert", func() (interface{}, error) {
-			return nil, u.f5Repo.DeleteCertOrChain(c, mSecurityProfile.CertificatePath)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete Chain
-	if mSecurityProfile.ChainPath != "" {
-		_, err := helper.LogF5Request("DeleteChain", func() (interface{}, error) {
-			return nil, u.f5Repo.DeleteCertOrChain(c, mSecurityProfile.ChainPath)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	// Delete Key
-	if mSecurityProfile.KeyPath != "" {
-		_, err := helper.LogF5Request("DeleteKey", func() (interface{}, error) {
-			return nil, u.f5Repo.DeleteKey(c, mSecurityProfile.KeyPath)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }

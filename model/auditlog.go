@@ -1,6 +1,7 @@
 package model
 
 import (
+	"ai-dekawaf/helper"
 	"time"
 
 	"gorm.io/gorm"
@@ -28,14 +29,25 @@ type Auditlog struct {
 	User           *User          `gorm:"foreignKey:UserID" json:"user"`
 }
 
-type OrganizationActivities struct {
-	Id             string    `gorm:"primaryKey;type:uuid" json:"id"`
-	OrganizationId string    `gorm:"not null" json:"organization_id,omitempty"`
-	UserID         string    `gorm:"null;type:uuid;index" json:"user_id" `
-	Action         string    `gorm:"not null" json:"action" `
-	EventName      string    `json:"event_name"`
-	Description    string    `json:"description"  `
-	CreatedAt      time.Time `gorm:"not null" json:"created_at"`
-	MetaData       string    `json:"meta_data"`
-	User           User      `gorm:"foreignKey:UserID" json:"user"`
+func (auditlog *Auditlog) BeforeCreate(tx *gorm.DB) (err error) {
+	now := time.Now()
+	if auditlog.ID == "" {
+		auditlog.ID = helper.GetUniqueID()
+	}
+	if auditlog.CreatedAt.IsZero() {
+		auditlog.CreatedAt = now
+	}
+	if auditlog.UpdatedAt.IsZero() {
+		auditlog.UpdatedAt = now
+	}
+	return nil
+}
+
+func (auditlog *Auditlog) BeforeUpdate(tx *gorm.DB) (err error) {
+	auditlog.UpdatedAt = time.Now()
+	return nil
+}
+
+func (Auditlog) TableName() string {
+	return "public.auditlogs"
 }
