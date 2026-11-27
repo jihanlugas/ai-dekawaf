@@ -117,6 +117,42 @@ func TestVirtualServerErrors(t *testing.T) {
 	}
 }
 
+func TestDeleteVSResponseHandling(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{"empty 200", http.StatusOK, "", ""},
+		{"empty 204", http.StatusNoContent, "", ""},
+		{"JSON 200", http.StatusOK, `{}`, ""},
+		{"F5 error", http.StatusBadRequest, `{"message":"cannot delete"}`, "cannot delete"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodDelete || r.URL.Path != "/mgmt/tm/ltm/virtual/~Common~test-vs" {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+			t.Setenv("F5_URL", server.URL)
+
+			err := NewRepository().DeleteVS(context.Background(), "/Common/test-vs")
+			if tt.wantErr == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestLoginResponseHandling(t *testing.T) {
 	status := http.StatusOK
 	body := `{"token":{"token":"new-token","timeout":1200}}`

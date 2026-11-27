@@ -57,6 +57,13 @@ type Repository interface {
 	ListVirtualAddress(ctx context.Context) (data response.F5ListVirtualAddress, err error)
 	GetVirtualAddress(ctx context.Context, fullpath string) (data response.F5VirtualAddress, err error)
 	AttachBotDefenseToVSProfile(ctx context.Context, fullpath string, req request.F5VSProfile) (data response.F5VSProfile, err error)
+	DeleteVS(ctx context.Context, fullpath string) (err error)
+	DeleteSecurityPolicy(ctx context.Context, policyID string) (err error)
+	DeleteSslSecurityProfile(ctx context.Context, fullpath string) (err error)
+	DeletePool(ctx context.Context, fullpath string) (err error)
+	DeleteNode(ctx context.Context, fullpath string) (err error)
+	DeleteCertOrChain(ctx context.Context, fullpath string) (err error)
+	DeleteKey(ctx context.Context, fullpath string) (err error)
 }
 
 type repository struct {
@@ -694,6 +701,9 @@ func decodeF5Response(res *httpclient.Response, operation string, data interface
 		}
 		return fmt.Errorf("%s failed: %s", operation, f5Error.Message)
 	}
+	if data == nil {
+		return nil
+	}
 	if err := json.Unmarshal(res.Body, data); err != nil {
 		return fmt.Errorf("failed to unmarshal %s response: %w", operation, err)
 	}
@@ -740,4 +750,102 @@ func (r *repository) AttachBotDefenseToVSProfile(ctx context.Context, fullpath s
 		return data, err
 	}
 	return data, nil
+}
+
+func (r *repository) DeleteVS(ctx context.Context, fullpath string) (err error) {
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/virtual/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+		"Content-Type":    "application/json",
+		"X-F5-Auth-Token": currentToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := decodeF5Response(res, "delete virtual server", nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *repository) DeleteSecurityPolicy(ctx context.Context, policyID string) (err error) {
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/asm/policies/%s", os.Getenv("F5_URL"), url.PathEscape(policyID)), map[string]string{
+		"Content-Type":    "application/json",
+		"X-F5-Auth-Token": currentToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := decodeF5Response(res, "delete security policy", nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *repository) DeleteSslSecurityProfile(ctx context.Context, fullpath string) (err error) {
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/client-ssl/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+		"Content-Type":    "application/json",
+		"X-F5-Auth-Token": currentToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := decodeF5Response(res, "delete ssl security profile", nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *repository) DeletePool(ctx context.Context, fullpath string) (err error) {
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/pool/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+		"Content-Type":    "application/json",
+		"X-F5-Auth-Token": currentToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := decodeF5Response(res, "delete pool", nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *repository) DeleteNode(ctx context.Context, fullpath string) (err error) {
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/ltm/node/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+		"Content-Type":    "application/json",
+		"X-F5-Auth-Token": currentToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := decodeF5Response(res, "delete node", nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *repository) DeleteCertOrChain(ctx context.Context, fullpath string) (err error) {
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/sys/certificate/ssl-cert/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+		"Content-Type":    "application/json",
+		"X-F5-Auth-Token": currentToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := decodeF5Response(res, "delete certificate or chain", nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *repository) DeleteKey(ctx context.Context, fullpath string) (err error) {
+	res, err := httpclient.Delete(ctx, fmt.Sprintf("%s/mgmt/tm/sys/certificate/ssl-key/%s", os.Getenv("F5_URL"), helper.FormatF5Path(fullpath)), map[string]string{
+		"Content-Type":    "application/json",
+		"X-F5-Auth-Token": currentToken(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := decodeF5Response(res, "delete key", nil); err != nil {
+		return err
+	}
+	return nil
 }

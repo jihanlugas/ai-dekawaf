@@ -141,7 +141,7 @@ func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecuri
 	}
 
 	go func() {
-		mSecurityProfile, err = u.createSecurityProfile(c, req, mSecurityProfile)
+		mSecurityProfile, err = u.createF5SecurityProfile(c, req, mSecurityProfile)
 		if err != nil {
 			mSecurityProfile.Status = model.SecurityProfileStatusInactive
 			websocket.SendWebsocketMessage(mProject.ID, map[string]string{
@@ -172,7 +172,7 @@ func (u *usecase) CreateSecurityProfile(c *gin.Context, req request.CreateSecuri
 	return nil
 }
 
-func (u *usecase) createSecurityProfile(c *gin.Context, req request.CreateSecurityProfile, mSecurityProfile model.SecurityProfile) (mNewSecurityProfile model.SecurityProfile, err error) {
+func (u *usecase) createF5SecurityProfile(c *gin.Context, req request.CreateSecurityProfile, mSecurityProfile model.SecurityProfile) (mNewSecurityProfile model.SecurityProfile, err error) {
 	mNewSecurityProfile = mSecurityProfile
 	resNode, err := helper.LogF5Request("CreateNode", func() (response.F5CreateNode, error) {
 		return u.f5Repo.CreateNode(c, request.F5CreateNode{
@@ -464,13 +464,138 @@ func (u *usecase) DeleteSecurityProfile(c *gin.Context, id string) (err error) {
 		MethodName:     "Delete Security Profile",
 	}
 
-	err = u.repo.DeleteByID(id)
+	mSecurityProfile.Status = model.SecurityProfileStatusPending
+	err = u.repo.Save(mSecurityProfile)
 	if err != nil {
-		go u.auditlogRepo.ErrorToLog(mLog, "Delete Security Profile", fmt.Sprintf("Failed to delete Security Profile %s", mSecurityProfile.Name))
+		go u.auditlogRepo.ErrorToLog(mLog, "Delete Security Profile", fmt.Sprintf("Failed to update Security Profile %s", mSecurityProfile.Name))
 		return err
 	}
 
-	go u.auditlogRepo.InfoToLog(mLog, "Delete Security Profile", fmt.Sprintf("Security Profile %s deleted", mSecurityProfile.Name))
+	go func() {
+		err := u.deleteF5SecurityProfile(c, mSecurityProfile)
+		if err != nil {
+			mSecurityProfile.Status = model.SecurityProfileStatusInactive
+			websocket.SendWebsocketMessage(mProject.ID, map[string]string{
+				"security_profile_id":   mSecurityProfile.ID,
+				"security_profile_name": mSecurityProfile.Name,
+				"action":                "delete_security_profile",
+				"status":                "failed",
+				"error":                 err.Error(),
+			})
+			go u.auditlogRepo.ErrorToLog(mLog, "Delete Security Profile", fmt.Sprintf("Failed to delete Security Profile resources %s: %s", mSecurityProfile.Name, err.Error()))
+		} else {
+			err = u.repo.DeleteByID(mSecurityProfile.ID)
+			if err != nil {
+				mSecurityProfile.Status = model.SecurityProfileStatusInactive
+				websocket.SendWebsocketMessage(mProject.ID, map[string]string{
+					"security_profile_id":   mSecurityProfile.ID,
+					"security_profile_name": mSecurityProfile.Name,
+					"action":                "delete_security_profile",
+					"status":                "failed",
+					"error":                 fmt.Sprintf("Failed to delete from database: %s", err.Error()),
+				})
+				go u.auditlogRepo.ErrorToLog(mLog, "Delete Security Profile", fmt.Sprintf("Failed to delete Security Profile from database %s: %s", mSecurityProfile.Name, err.Error()))
+			} else {
+				websocket.SendWebsocketMessage(mProject.ID, map[string]string{
+					"security_profile_id":   mSecurityProfile.ID,
+					"security_profile_name": mSecurityProfile.Name,
+					"action":                "delete_security_profile",
+					"status":                "success",
+				})
+				go u.auditlogRepo.InfoToLog(mLog, "Delete Security Profile", fmt.Sprintf("Security Profile %s deleted successfully", mSecurityProfile.Name))
+			}
+		}
+	}()
+
+	go u.auditlogRepo.InfoToLog(mLog, "Delete Security Profile", fmt.Sprintf("Security Profile %s is being deleted", mSecurityProfile.Name))
+
+	return nil
+}
+
+func (u *usecase) deleteF5SecurityProfile(c *gin.Context, mSecurityProfile model.SecurityProfile) (err error) {
+	// Delete Virtual Server
+	if mSecurityProfile.VirtualServer != "" {
+		vsFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.VirtualServer)
+		_, err := helper.LogF5Request("DeleteVS", func() (interface{}, error) {
+			return nil, u.f5Repo.DeleteVS(c, vsFullPath)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete Security Policy
+	if mSecurityProfile.Policy != "" {
+		_, err := helper.LogF5Request("DeleteSecurityPolicy", func() (interface{}, error) {
+			return nil, u.f5Repo.DeleteSecurityPolicy(c, mSecurityProfile.Policy)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete SSL Security Profile
+	if mSecurityProfile.ClientSSL != "" {
+		sslFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.ClientSSL)
+		_, err := helper.LogF5Request("DeleteSslSecurityProfile", func() (interface{}, error) {
+			return nil, u.f5Repo.DeleteSslSecurityProfile(c, sslFullPath)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete Pool
+	if mSecurityProfile.Pool != "" {
+		poolFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.Pool)
+		_, err := helper.LogF5Request("DeletePool", func() (interface{}, error) {
+			return nil, u.f5Repo.DeletePool(c, poolFullPath)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete Node
+	if mSecurityProfile.Node != "" {
+		nodeFullPath := fmt.Sprintf("/Common/%s", mSecurityProfile.Node)
+		_, err := helper.LogF5Request("DeleteNode", func() (interface{}, error) {
+			return nil, u.f5Repo.DeleteNode(c, nodeFullPath)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete Certificate
+	if mSecurityProfile.CertificatePath != "" {
+		_, err := helper.LogF5Request("DeleteCert", func() (interface{}, error) {
+			return nil, u.f5Repo.DeleteCertOrChain(c, mSecurityProfile.CertificatePath)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete Chain
+	if mSecurityProfile.ChainPath != "" {
+		_, err := helper.LogF5Request("DeleteChain", func() (interface{}, error) {
+			return nil, u.f5Repo.DeleteCertOrChain(c, mSecurityProfile.ChainPath)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete Key
+	if mSecurityProfile.KeyPath != "" {
+		_, err := helper.LogF5Request("DeleteKey", func() (interface{}, error) {
+			return nil, u.f5Repo.DeleteKey(c, mSecurityProfile.KeyPath)
+		})
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
